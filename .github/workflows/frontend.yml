@@ -1,4 +1,5 @@
-name: Frontend CI/CD
+name: "🎨 Frontend CI/CD"
+run-name: "🎨 Frontend — ${{ github.event_name == 'workflow_dispatch' && 'Manual deploy' || github.event.head_commit.message }}"
 
 on:
   push:
