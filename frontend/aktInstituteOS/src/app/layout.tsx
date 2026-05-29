@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "AKT Institute OS",
-  description: "Institute management system",
+  description: "AKT Info Institute — CRM & Management System",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

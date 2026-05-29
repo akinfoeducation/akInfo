@@ -5,6 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
+// AKT Institute OS v1.0.0 — https://akinfoinstitute.tech
 @SpringBootApplication
 @EnableAsync
 @EnableScheduling
