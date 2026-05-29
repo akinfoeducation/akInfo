@@ -16,19 +16,20 @@ import {
   Search,
   CalendarDays,
   Bell,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const MAIN_NAV = [
-  { href: "/",           label: "Dashboard",  icon: LayoutDashboard, exact: true },
-  { href: "/leads",      label: "Leads",      icon: UserCheck },
-  { href: "/admissions", label: "Admissions", icon: ClipboardList },
-  { href: "/students",   label: "Students",   icon: Users },
-  { href: "/courses",    label: "Courses",    icon: BookOpen },
-  { href: "/batches",    label: "Batches",    icon: CalendarDays },
-  { href: "/fees",           label: "Fees",           icon: CreditCard },
-  { href: "/notifications",  label: "Notifications",  icon: Bell },
-  { href: "/reports",        label: "Reports",        icon: BarChart3 },
+  { href: "/",               label: "Dashboard",     icon: LayoutDashboard, exact: true },
+  { href: "/leads",          label: "Leads",         icon: UserCheck },
+  { href: "/admissions",     label: "Admissions",    icon: ClipboardList },
+  { href: "/students",       label: "Students",      icon: Users },
+  { href: "/courses",        label: "Courses",       icon: BookOpen },
+  { href: "/batches",        label: "Batches",       icon: CalendarDays },
+  { href: "/fees",           label: "Fees",          icon: CreditCard },
+  { href: "/notifications",  label: "Notifications", icon: Bell },
+  { href: "/reports",        label: "Reports",       icon: BarChart3 },
 ];
 
 const BOTTOM_NAV = [
@@ -36,21 +37,37 @@ const BOTTOM_NAV = [
   { href: "/help",     label: "Help Center", icon: HelpCircle },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  open?: boolean;
+  onClose?: () => void;
+}
+
+export function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
 
   function isActive(href: string, exact = false) {
     return exact ? pathname === href : pathname === href || pathname.startsWith(href + "/");
   }
 
-  return (
+  const sidebarContent = (
     <aside className="flex flex-col w-60 shrink-0 h-full bg-white border-r border-gray-200">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-4 py-4 border-b border-gray-100">
-        <div className="size-8 rounded-lg bg-emerald-500 flex items-center justify-center shrink-0">
-          <GraduationCap className="size-4 text-white" />
+      <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100">
+        <div className="flex items-center gap-2.5">
+          <div className="size-8 rounded-lg bg-emerald-500 flex items-center justify-center shrink-0">
+            <GraduationCap className="size-4 text-white" />
+          </div>
+          <span className="text-sm font-semibold text-gray-900">AKT Institute</span>
         </div>
-        <span className="text-sm font-semibold text-gray-900">AKT Institute</span>
+        {/* Close button — mobile only */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="md:hidden size-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400"
+          >
+            <X className="size-4" />
+          </button>
+        )}
       </div>
 
       {/* Search */}
@@ -58,7 +75,7 @@ export function Sidebar() {
         <div className="flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-2 cursor-text">
           <Search className="size-3.5 text-gray-400 shrink-0" />
           <span className="text-xs text-gray-400 flex-1">Search...</span>
-          <kbd className="text-[10px] text-gray-400">⌘K</kbd>
+          <kbd className="text-[10px] text-gray-400 hidden md:block">⌘K</kbd>
         </div>
       </div>
 
@@ -74,6 +91,7 @@ export function Sidebar() {
               <Link
                 key={href}
                 href={href}
+                onClick={onClose}
                 className={cn(
                   "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all duration-150",
                   active
@@ -98,6 +116,7 @@ export function Sidebar() {
           <Link
             key={href}
             href={href}
+            onClick={onClose}
             className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-all duration-150"
           >
             <Icon className="size-4 shrink-0 text-gray-400" />
@@ -106,5 +125,29 @@ export function Sidebar() {
         ))}
       </div>
     </aside>
+  );
+
+  return (
+    <>
+      {/* Desktop sidebar — always visible */}
+      <div className="hidden md:flex">
+        {sidebarContent}
+      </div>
+
+      {/* Mobile sidebar — slide-in drawer */}
+      {open && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={onClose}
+          />
+          {/* Drawer */}
+          <div className="relative flex">
+            {sidebarContent}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

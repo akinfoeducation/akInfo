@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Bell, Search, Bookmark, ChevronDown, LogOut, User, Settings, LayoutDashboard } from "lucide-react";
+import { Bell, Search, Bookmark, ChevronDown, LogOut, User, Settings, LayoutDashboard, Menu } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/stores/auth.store";
 import { logout } from "@/lib/api/auth.api";
@@ -18,7 +18,11 @@ const PAGE_LABELS: Array<{ prefix: string; label: string }> = [
   { prefix: "/help",       label: "Help" },
 ];
 
-export function Header() {
+interface HeaderProps {
+  onMenuClick?: () => void;
+}
+
+export function Header({ onMenuClick }: HeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, clearAuth } = useAuthStore();
@@ -48,11 +52,18 @@ export function Header() {
 
   return (
     <header className="flex items-center justify-between h-14 px-5 border-b border-gray-200 bg-white shrink-0">
-      {/* Left: current page breadcrumb */}
+      {/* Left: hamburger (mobile) + page label */}
       <div className="flex items-center gap-2">
+        {/* Hamburger — mobile only */}
+        <button
+          onClick={onMenuClick}
+          className="md:hidden size-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-500"
+        >
+          <Menu className="size-4" />
+        </button>
         <div className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-600">
           <LayoutDashboard className="size-3.5 text-gray-400" />
-          {pageLabel}
+          <span className="hidden sm:inline">{pageLabel}</span>
         </div>
       </div>
 
