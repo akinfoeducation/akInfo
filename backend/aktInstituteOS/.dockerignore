@@ -1,0 +1,23 @@
+# Build output (we copy the pre-built JAR)
+build/
+.gradle/
+out/
+
+# Source (not needed in runtime image after builder stage)
+# Keep src/ — builder stage needs it
+
+# Dev configs
+.env.local
+.env
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test reports
+build/reports/

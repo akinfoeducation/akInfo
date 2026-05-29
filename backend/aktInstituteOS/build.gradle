@@ -1,0 +1,107 @@
+plugins {
+    id 'org.springframework.boot' version '3.3.5'
+    id 'io.spring.dependency-management' version '1.1.6'
+    id 'java'
+}
+
+group = 'com.akt'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Spring Boot starters
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // Database
+    runtimeOnly 'org.postgresql:postgresql'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+
+    // JWT
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+    // Excel export
+    implementation 'org.apache.poi:poi-ooxml:5.2.5'
+
+    // MapStruct (DTO mapping)
+    implementation 'org.mapstruct:mapstruct:1.6.3'
+    annotationProcessor 'org.mapstruct:mapstruct-processor:1.6.3'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
+
+    // OpenAPI / Swagger UI
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+
+    // Meilisearch Java SDK
+    implementation 'com.meilisearch.sdk:meilisearch-java:0.14.1'
+
+    // Testing
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testRuntimeOnly 'com.h2database:h2'
+}
+
+compileJava {
+    options.compilerArgs += [
+        '-Amapstruct.defaultComponentModel=spring',
+        '-Amapstruct.unmappedTargetPolicy=IGNORE'
+    ]
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+jar {
+    enabled = false // Only bootJar
+}
+
+// ── Load .env.local for local development ──────────────────────────────────
+// Create .env.local (gitignored) to set credentials without editing YAMLs.
+bootRun {
+    jvmArgs = ['-Dspring.profiles.active=dev']
+    def envFile = rootProject.file('.env.local')
+    if (envFile.exists()) {
+        def envVars = [:]
+        envFile.readLines().each { line ->
+            def trimmed = line.trim()
+            if (trimmed && !trimmed.startsWith('#') && trimmed.contains('=')) {
+                def idx = trimmed.indexOf('=')
+                def key = trimmed.substring(0, idx).trim()
+                def val = trimmed.substring(idx + 1).trim()
+                // Strip surrounding quotes if present
+                if ((val.startsWith('"') && val.endsWith('"')) ||
+                    (val.startsWith("'") && val.endsWith("'"))) {
+                    val = val.substring(1, val.length() - 1)
+                }
+                envVars[key] = val
+            }
+        }
+        environment envVars
+        println "Loaded ${envVars.size()} vars from .env.local"
+    }
+}

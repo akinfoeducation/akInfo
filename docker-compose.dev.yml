@@ -1,0 +1,30 @@
+# Development override — exposes ports for local tooling, no NGINX
+services:
+  postgres:
+    ports:
+      - "5432:5432"   # Access directly from host IDE / DBeaver / psql
+
+  meilisearch:
+    ports:
+      - "7700:7700"   # Access Meilisearch dashboard in dev
+
+  backend:
+    build:
+      context: ./backend/aktInstituteOS
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_HOST: postgres
+      DB_PORT: 5432
+    ports:
+      - "8080:8080"   # Direct backend access for dev/testing
+
+  frontend:
+    # In dev, run Next.js locally (npm run dev) instead of Docker
+    profiles:
+      - donotstart
+
+  nginx:
+    # Not needed in dev — access backend on :8080 and frontend on :3000 directly
+    profiles:
+      - donotstart

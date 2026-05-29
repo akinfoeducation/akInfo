@@ -1,0 +1,30 @@
+# Dependencies (installed fresh in container)
+node_modules/
+.npm
+
+# Build output (built in container)
+.next/
+out/
+
+# Dev configs
+.env.local
+.env.development
+.env
+
+# Tests
+__tests__/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+README.md

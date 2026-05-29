@@ -1,0 +1,31 @@
+# Production overrides — uses pre-built images from GitHub Container Registry.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This file ONLY overrides what differs in production.
+# All service definitions, networks, and volumes come from docker-compose.yml.
+
+services:
+  backend:
+    image: ghcr.io/akinfoeducation/akinfo-backend:latest
+    build: !reset null     # disable source build in production
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      NOTIFICATION_EMAIL_ENABLED: ${NOTIFICATION_EMAIL_ENABLED:-true}
+      NOTIFICATION_WHATSAPP_ENABLED: ${NOTIFICATION_WHATSAPP_ENABLED:-false}
+      NOTIFICATION_FROM_NAME: ${NOTIFICATION_FROM_NAME:-AKT Info Institute}
+      WHATSAPP_PROVIDER: ${WHATSAPP_PROVIDER:-META}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads_data:/app/uploads
+
+  frontend:
+    image: ghcr.io/akinfoeducation/akinfo-frontend:latest
+    build: !reset null
+    environment:
+      NODE_ENV: production
+      BACKEND_URL: http://backend:8080
+
+volumes:
+  uploads_data:

@@ -1,0 +1,125 @@
+spring:
+  application:
+    name: akt-institute-backend
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:akt_institute}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: AktHikariPool
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      auto-commit: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+    out-of-order: false
+
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+        connection-timeout: 5000
+        timeout: 5000
+
+server:
+  port: 8080
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html
+    min-response-size: 1024
+
+# Application custom properties
+app:
+  institute:
+    default-id: 1
+
+  jwt:
+    secret: ${JWT_SECRET:}
+    access-token-expiry-ms: 900000       # 15 minutes
+    refresh-token-expiry-days: 7
+
+  cookie:
+    secure: true    # Set false in dev profile (HTTP localhost)
+
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
+  meilisearch:
+    host: ${MEILI_HOST:http://localhost:7700}
+    master-key: ${MEILI_MASTER_KEY:}
+
+  upload:
+    dir: ${UPLOAD_DIR:uploads}
+    base-url: /uploads
+
+  notification:
+    email-enabled: ${NOTIFICATION_EMAIL_ENABLED:true}
+    whatsapp-enabled: ${NOTIFICATION_WHATSAPP_ENABLED:false}
+    email:
+      from: ${MAIL_USERNAME:}
+      from-name: ${NOTIFICATION_FROM_NAME:AKT Info Institute}
+      max-retries: 3
+    whatsapp:
+      # Provider: META (default) or WATI
+      provider: ${WHATSAPP_PROVIDER:META}
+      # Meta Cloud API
+      api-base-url: ${WHATSAPP_API_BASE_URL:https://graph.facebook.com/v18.0}
+      phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:}
+      access-token: ${WHATSAPP_ACCESS_TOKEN:}
+      # WATI (alternative Indian BSP)
+      wati-api-url: ${WATI_API_URL:}
+      wati-token: ${WATI_TOKEN:}
+      max-retries: 3
+
+# Logging
+logging:
+  level:
+    com.akt.institute: INFO
+    org.springframework.security: WARN
+    org.springframework.jdbc.core: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# SpringDoc / Swagger
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+  info:
+    title: AKT Institute OS API
+    version: 1.0.0
+    description: Institute CRM & Management System REST API
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,flyway
+  endpoint:
+    health:
+      show-details: when_authorized

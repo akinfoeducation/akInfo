@@ -1,0 +1,112 @@
+name: Frontend CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/akinfoeducation/akinfo-frontend
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/aktInstituteOS/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: frontend/aktInstituteOS
+
+      - name: Type check
+        run: npx tsc --noEmit
+        working-directory: frontend/aktInstituteOS
+
+  build-and-push:
+    name: Build & Push Image
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: frontend/aktInstituteOS
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production
+
+    steps:
+      - name: Deploy frontend container
+        uses: appleboy/ssh-action@v1
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          IMAGE_TAG: ${{ env.IMAGE }}:latest
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: GHCR_TOKEN,GHCR_USER,IMAGE_TAG
+          script: |
+            set -e
+            cd /opt/akinfo
+
+            echo "Logging into GHCR..."
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+            echo "Pulling latest frontend image..."
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull frontend
+
+            echo "Restarting frontend container..."
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d \
+              --no-deps --force-recreate frontend
+
+            echo "Cleaning up old images..."
+            docker image prune -f
+
+            echo "Frontend deployed successfully ✅"

@@ -1,0 +1,133 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend.yml'
+  workflow_dispatch:      # allow manual trigger from GitHub UI
+
+env:
+  IMAGE: ghcr.io/akinfoeducation/akinfo-backend
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Run tests
+        run: ./gradlew test --no-daemon
+        working-directory: backend/aktInstituteOS
+
+      - name: Upload test report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: backend/aktInstituteOS/build/reports/tests/
+
+  build-and-push:
+    name: Build & Push Image
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Build JAR (skip tests — already ran)
+        run: ./gradlew bootJar --no-daemon -x test
+        working-directory: backend/aktInstituteOS
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: backend/aktInstituteOS
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production
+
+    steps:
+      - name: Deploy backend container
+        uses: appleboy/ssh-action@v1
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          IMAGE_TAG: ${{ env.IMAGE }}:latest
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          envs: GHCR_TOKEN,GHCR_USER,IMAGE_TAG
+          script: |
+            set -e
+            cd /opt/akinfo
+
+            echo "Logging into GHCR..."
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+            echo "Pulling latest backend image..."
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend
+
+            echo "Restarting backend container..."
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d \
+              --no-deps --force-recreate backend
+
+            echo "Waiting for health check..."
+            sleep 15
+            docker inspect --format='{{.State.Health.Status}}' akt-backend || true
+
+            echo "Cleaning up old images..."
+            docker image prune -f
+
+            echo "Backend deployed successfully ✅"

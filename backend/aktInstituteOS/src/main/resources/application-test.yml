@@ -1,0 +1,25 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:akt_test;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=false;MODE=PostgreSQL;NON_KEYWORDS=YEAR,VALUE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  flyway:
+    enabled: false
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/test-schema.sql
+
+app:
+  jwt:
+    secret: dGVzdC1zZWNyZXQta2V5LXRoYXQtaXMtbG9uZy1lbm91Z2gtZm9yLUhTMjU2LWluLXRlc3Rpbmct
+    access-token-expiry-ms: 900000
+    refresh-token-expiry-days: 7
+  cors:
+    allowed-origins: http://localhost:3000
+  meilisearch:
+    host: http://localhost:7700
+    master-key: test-key
+  institute:
+    default-id: 1

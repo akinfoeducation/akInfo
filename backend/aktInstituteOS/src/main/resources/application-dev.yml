@@ -1,0 +1,45 @@
+management:
+  health:
+    mail:
+      enabled: false   # suppress mail health check (fails when not configured)
+
+spring:
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          ssl:
+            trust: smtp.gmail.com      # required for Gmail App Passwords
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000
+
+logging:
+  level:
+    com.akt.institute: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.jdbc.core: DEBUG
+    org.springframework.jdbc.core.StatementCreatorUtils: TRACE
+    com.akt.institute.notification: DEBUG
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:ZGV2LXNlY3JldC1rZXktZm9yLWxvY2FsLWRldmVsb3BtZW50LW9ubHktY2hhbmdlLWluLXByb2Q=}
+  cors:
+    allowed-origins: http://localhost:3000,http://localhost:3001
+  cookie:
+    secure: false
+  notification:
+    email-enabled: ${NOTIFICATION_EMAIL_ENABLED:true}
+    whatsapp-enabled: ${NOTIFICATION_WHATSAPP_ENABLED:false}
+    email:
+      from: ${MAIL_USERNAME:}
+      from-name: ${NOTIFICATION_FROM_NAME:AKT Info Institute}

@@ -1,0 +1,48 @@
+# ── Secrets ───────────────────────────────────────────────────────────────────
+.env
+*.env
+.env.*
+!.env.example
+
+# ── Scratch / notes files (root-level only) ──────────────────────────────────
+/aktInstituteOS
+/untitled
+
+# ── Java build artifacts ──────────────────────────────────────────────────────
+backend/build/
+backend/aktInstituteOS/build/
+backend/.gradle/
+backend/aktInstituteOS/.gradle/
+*.class
+*.jar
+!backend/aktInstituteOS/gradle/wrapper/gradle-wrapper.jar
+
+# ── Next.js / Node ────────────────────────────────────────────────────────────
+frontend/.next/
+frontend/node_modules/
+frontend/aktInstituteOS/.next/
+frontend/aktInstituteOS/node_modules/
+*.tsbuildinfo
+next-env.d.ts
+
+# ── Docker SSL ────────────────────────────────────────────────────────────────
+docker/nginx/ssl/
+*.pem
+*.crt
+*.key
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+npm-debug.log*
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
