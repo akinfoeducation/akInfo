@@ -1,11 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { Bell, Search, Bookmark, ChevronDown, LogOut, User, Settings, LayoutDashboard, Menu } from "lucide-react";
+import { Bell, Search, Bookmark, ChevronDown, LogOut, User, Settings, LayoutDashboard, Menu, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/stores/auth.store";
 import { logout } from "@/lib/api/auth.api";
+
+const INSTITUTE_NAMES: Record<string, string> = {
+  delhi: "AKT Institute Delhi",
+  patna: "AKT Institute Patna",
+};
+
+function useInstituteName(): string | null {
+  const [name, setName] = useState<string | null>(null);
+  useEffect(() => {
+    const parts = window.location.hostname.split(".");
+    let sub: string | undefined;
+    if (parts.length === 2 && parts[1] === "localhost") sub = parts[0];
+    else if (parts.length >= 3) sub = parts[0];
+    if (sub && INSTITUTE_NAMES[sub]) setName(INSTITUTE_NAMES[sub]);
+  }, []);
+  return name;
+}
 
 const PAGE_LABELS: Array<{ prefix: string; label: string }> = [
   { prefix: "/leads",      label: "Leads" },
@@ -27,6 +44,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   const pathname = usePathname();
   const { user, clearAuth } = useAuthStore();
   const [showDropdown, setShowDropdown] = useState(false);
+  const instituteName = useInstituteName();
 
   const pageLabel =
     PAGE_LABELS.find((e) => pathname === e.prefix || pathname.startsWith(e.prefix + "/"))?.label ??
@@ -51,7 +69,7 @@ export function Header({ onMenuClick }: HeaderProps) {
   const displayName = user?.fullName ?? `${user?.firstName ?? ""} ${user?.lastName ?? ""}`.trim();
 
   return (
-    <header className="flex items-center justify-between h-14 px-5 border-b border-gray-200 bg-white shrink-0">
+    <header className="relative flex items-center justify-between h-14 px-5 border-b border-gray-200 bg-white shrink-0">
       {/* Left: hamburger (mobile) + page label */}
       <div className="flex items-center gap-2">
         {/* Hamburger — mobile only */}
@@ -66,6 +84,14 @@ export function Header({ onMenuClick }: HeaderProps) {
           <span className="hidden sm:inline">{pageLabel}</span>
         </div>
       </div>
+
+      {/* Centre: institute name */}
+      {instituteName && (
+        <div className="absolute left-1/2 -translate-x-1/2 hidden sm:flex items-center gap-1.5 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-1">
+          <MapPin className="size-3 text-emerald-500 shrink-0" />
+          <span className="text-xs font-medium text-emerald-700">{instituteName}</span>
+        </div>
+      )}
 
       {/* Right: actions */}
       <div className="flex items-center gap-1">
