@@ -1,12 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Eye, EyeOff, GraduationCap, Users, TrendingUp, BookOpen, CheckCircle2 } from "lucide-react";
+import { Eye, EyeOff, GraduationCap, Users, TrendingUp, BookOpen, CheckCircle2, MapPin } from "lucide-react";
+
+/** Map subdomain → human-readable institute name */
+const INSTITUTE_NAMES: Record<string, string> = {
+  delhi: "AKT Institute Delhi",
+  patna: "AKT Institute Patna",
+};
 
 import { login } from "@/lib/api/auth.api";
 import { useAuthStore } from "@/lib/stores/auth.store";
@@ -29,6 +35,16 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const setAuth = useAuthStore((s) => s.setAuth);
   const [showPassword, setShowPassword] = useState(false);
+  const [instituteName, setInstituteName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const hostname = window.location.hostname;
+    const parts = hostname.split(".");
+    let sub: string | undefined;
+    if (parts.length === 2 && parts[1] === "localhost") sub = parts[0]; // delhi.localhost
+    else if (parts.length >= 3) sub = parts[0];                         // delhi.akinfoinstitute.tech
+    if (sub && INSTITUTE_NAMES[sub]) setInstituteName(INSTITUTE_NAMES[sub]);
+  }, []);
 
   const {
     register,
@@ -65,7 +81,15 @@ export function LoginForm() {
             <div className="size-10 rounded-xl bg-white/20 flex items-center justify-center">
               <GraduationCap className="size-6 text-white" />
             </div>
-            <span className="text-lg font-bold text-white">AKT Institute OS</span>
+            <div>
+              <span className="text-lg font-bold text-white">AKT Institute OS</span>
+              {instituteName && (
+                <div className="flex items-center gap-1 mt-0.5">
+                  <MapPin className="size-3 text-emerald-200" />
+                  <span className="text-xs text-emerald-200">{instituteName}</span>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Main copy */}
@@ -112,7 +136,11 @@ export function LoginForm() {
           {/* Heading */}
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900">Welcome back</h2>
-            <p className="text-sm text-gray-500 mt-1">Sign in to your account to continue</p>
+            {instituteName ? (
+              <p className="text-sm text-emerald-600 font-medium mt-1">{instituteName}</p>
+            ) : (
+              <p className="text-sm text-gray-500 mt-1">Sign in to your account to continue</p>
+            )}
           </div>
 
           {/* Form */}

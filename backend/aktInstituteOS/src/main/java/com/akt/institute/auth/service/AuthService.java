@@ -3,6 +3,7 @@ package com.akt.institute.auth.service;
 import com.akt.institute.auth.domain.User;
 import com.akt.institute.auth.dto.*;
 import com.akt.institute.auth.repository.UserDao;
+import com.akt.institute.institute.repository.InstituteDao;
 import com.akt.institute.shared.exception.BusinessException;
 import com.akt.institute.shared.security.JwtService;
 import com.akt.institute.shared.security.UserPrincipal;
@@ -26,6 +27,7 @@ import java.util.Arrays;
 public class AuthService {
 
     private final UserDao userDao;
+    private final InstituteDao instituteDao;
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final PasswordEncoder passwordEncoder;
@@ -45,8 +47,9 @@ public class AuthService {
 
     @Transactional
     public LoginResponse login(LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
+        Long instituteId = resolveInstituteId(request.getSubdomain());
         var user = userDao.findByEmailOrUsernameAndInstituteId(
-            request.getEmailOrUsername(), defaultInstituteId
+            request.getEmailOrUsername(), instituteId
         ).orElseThrow(() -> new BusinessException("Invalid email or password", "INVALID_CREDENTIALS", HttpStatus.UNAUTHORIZED));
 
         if (user.isLocked()) {
@@ -174,6 +177,24 @@ public class AuthService {
         userDao.save(user);
 
         refreshTokenService.revokeAllForUser(user);
+    }
+
+    /**
+     * Resolves the institute ID from the subdomain sent by the frontend.
+     * If subdomain is blank (e.g. local dev on localhost), falls back to
+     * the configured default institute (app.institute.default-id).
+     */
+    private Long resolveInstituteId(String subdomain) {
+        if (subdomain != null && !subdomain.isBlank()) {
+            return instituteDao.findBySubdomain(subdomain.trim().toLowerCase())
+                    .orElseThrow(() -> new BusinessException(
+                            "No active institute found for this portal",
+                            "INSTITUTE_NOT_FOUND",
+                            HttpStatus.BAD_REQUEST))
+                    .getId();
+        }
+        log.debug("No subdomain in login request — using default institute id={}", defaultInstituteId);
+        return defaultInstituteId;
     }
 
     private void handleFailedAttempt(User user) {

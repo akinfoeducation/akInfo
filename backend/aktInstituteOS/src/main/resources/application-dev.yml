@@ -34,7 +34,7 @@ app:
   jwt:
     secret: ${JWT_SECRET:ZGV2LXNlY3JldC1rZXktZm9yLWxvY2FsLWRldmVsb3BtZW50LW9ubHktY2hhbmdlLWluLXByb2Q=}
   cors:
-    allowed-origins: http://localhost:3000,http://localhost:3001
+    allowed-origins: http://localhost:3000,http://localhost:3001,http://delhi.localhost:3000,http://patna.localhost:3000
   cookie:
     secure: false
   notification:

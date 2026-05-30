@@ -11,4 +11,11 @@ public class LoginRequest {
 
     @NotBlank(message = "Password is required")
     private String password;
+
+    /**
+     * Subdomain sent by the frontend to identify the institute.
+     * e.g. "delhi" from delhi.akinfoinstitute.tech
+     * Null/blank on localhost dev — backend falls back to app.institute.default-id.
+     */
+    private String subdomain;
 }

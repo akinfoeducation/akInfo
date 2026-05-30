@@ -2,10 +2,33 @@ import apiClient from "./client";
 import type { ApiResponse } from "@/types/api";
 import type { LoginResponse, TokenRefreshResponse, UserInfo } from "@/types/auth";
 
+/**
+ * Extracts the subdomain from the current browser hostname.
+ *
+ * Examples:
+ *   delhi.akinfoinstitute.tech  →  "delhi"
+ *   patna.akinfoinstitute.tech  →  "patna"
+ *   delhi.localhost             →  "delhi"   (local dev with /etc/hosts)
+ *   localhost                   →  undefined  (falls back to default institute)
+ *   akinfoinstitute.tech        →  undefined  (apex domain, no subdomain)
+ */
+function getSubdomain(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const hostname = window.location.hostname; // excludes port number
+  const parts = hostname.split(".");
+
+  if (parts.length === 1) return undefined;                          // bare "localhost"
+  if (parts.length === 2 && parts[1] === "localhost") return parts[0]; // "delhi.localhost"
+  if (parts.length >= 3) return parts[0];                            // "delhi.akinfoinstitute.tech"
+  return undefined;                                                  // apex domain only
+}
+
 export async function login(email: string, password: string): Promise<LoginResponse> {
+  const subdomain = getSubdomain();
   const { data } = await apiClient.post<ApiResponse<LoginResponse>>("/api/v1/auth/login", {
     emailOrUsername: email,
     password,
+    ...(subdomain ? { subdomain } : {}),
   });
   return data.data;
 }
