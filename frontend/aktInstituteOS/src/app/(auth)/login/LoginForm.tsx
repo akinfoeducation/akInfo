@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { Eye, EyeOff, GraduationCap, Users, TrendingUp, BookOpen, CheckCircle2, MapPin } from "lucide-react";
+import { Eye, EyeOff, GraduationCap, Users, TrendingUp, BookOpen, CheckCircle2, MapPin, AlertCircle } from "lucide-react";
 
 /** Map subdomain → human-readable institute name */
 const INSTITUTE_NAMES: Record<string, string> = {
@@ -34,8 +34,9 @@ export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const setAuth = useAuthStore((s) => s.setAuth);
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword,  setShowPassword]  = useState(false);
   const [instituteName, setInstituteName] = useState<string | null>(null);
+  const [loginError,    setLoginError]    = useState<string | null>(null);
 
   useEffect(() => {
     const hostname = window.location.hostname;
@@ -53,16 +54,21 @@ export function LoginForm() {
   } = useForm<FormData>({ resolver: zodResolver(schema) });
 
   async function onSubmit(values: FormData) {
+    setLoginError(null);
     try {
       const result = await login(values.emailOrUsername, values.password);
       setAuth(result.user, result.accessToken, result.expiresIn);
-      const from = searchParams.get("from") ?? "/";
-      router.replace(from);
+      const from = searchParams.get("from");
+      const isStudent = result.user.roles?.includes("STUDENT");
+      router.replace(from ?? (isStudent ? "/portal/dashboard" : "/"));
     } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const serverMsg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        "Invalid credentials. Please try again.";
-      toast.error(msg);
+        status === 401 || status === 403
+          ? "Invalid username or password. Please try again."
+          : serverMsg ?? "Something went wrong. Please try again.";
+      setLoginError(msg);
     }
   }
 
@@ -144,7 +150,16 @@ export function LoginForm() {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+
+            {/* ── Inline login error banner ── */}
+            {loginError && (
+              <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                <AlertCircle className="size-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700 leading-snug">{loginError}</p>
+              </div>
+            )}
+
             <div>
               <label htmlFor="emailOrUsername" className="block text-sm font-medium text-gray-700 mb-1.5">
                 Email or Username
@@ -154,9 +169,13 @@ export function LoginForm() {
                 type="text"
                 placeholder="admin or admin@example.com"
                 autoComplete="username"
-                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 transition-all"
-                aria-invalid={!!errors.emailOrUsername}
-                {...register("emailOrUsername")}
+                className={`w-full rounded-xl border bg-white px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 transition-all ${
+                  loginError
+                    ? "border-red-300 focus:border-red-400 focus:ring-red-400/20"
+                    : "border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20"
+                }`}
+                aria-invalid={!!errors.emailOrUsername || !!loginError}
+                {...register("emailOrUsername", { onChange: () => setLoginError(null) })}
               />
               {errors.emailOrUsername && (
                 <p className="mt-1 text-xs text-red-500">{errors.emailOrUsername.message}</p>
@@ -178,9 +197,13 @@ export function LoginForm() {
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   autoComplete="current-password"
-                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 pr-10 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400/20 transition-all"
-                  aria-invalid={!!errors.password}
-                  {...register("password")}
+                  className={`w-full rounded-xl border bg-white px-4 py-2.5 pr-10 text-sm text-gray-900 placeholder:text-gray-400 outline-none focus:ring-2 transition-all ${
+                    loginError
+                      ? "border-red-300 focus:border-red-400 focus:ring-red-400/20"
+                      : "border-gray-200 focus:border-emerald-400 focus:ring-emerald-400/20"
+                  }`}
+                  aria-invalid={!!errors.password || !!loginError}
+                  {...register("password", { onChange: () => setLoginError(null) })}
                 />
                 <button
                   type="button"

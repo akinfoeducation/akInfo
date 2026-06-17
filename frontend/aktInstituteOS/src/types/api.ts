@@ -1,3 +1,5 @@
+export type PagedApiResponse<T> = ApiResponse<T>;
+
 export interface ApiResponse<T> {
   success: boolean;
   message: string;

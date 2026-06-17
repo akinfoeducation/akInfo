@@ -51,6 +51,13 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // Auth endpoints must never trigger the refresh loop — pass the error straight through
+    // so the login form's own catch block can handle it and show an inline message.
+    const url: string = original.url ?? "";
+    if (url.includes("/auth/login") || url.includes("/auth/refresh")) {
+      return Promise.reject(error);
+    }
+
     if (isRefreshing) {
       return new Promise((resolve, reject) => {
         refreshQueue.push((token) => {
