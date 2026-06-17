@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { BatchStatusBadge } from "@/components/courses/BatchStatusBadge";
 import { getBatchDashboard, listAllBatches, patchBatchStatus } from "@/lib/api/batches.api";
+import { usePermissions } from "@/lib/hooks/usePermissions";
 import type { BatchStatus } from "@/types/course";
 
 const STATUS_FILTERS: Array<{ value: BatchStatus | ""; label: string }> = [
@@ -27,6 +28,8 @@ const STATUS_FILTERS: Array<{ value: BatchStatus | ""; label: string }> = [
 export default function BatchesPage() {
   const [statusFilter, setStatusFilter] = useState<BatchStatus | "">("");
   const qc = useQueryClient();
+  const { has } = usePermissions();
+  const canManage = has("BATCH_MANAGE");
 
   const { data: dashboard } = useQuery({
     queryKey: ["batch-dashboard"],
@@ -64,12 +67,14 @@ export default function BatchesPage() {
             Manage training batches and student assignments
           </p>
         </div>
-        <Link href="/batches/new">
-          <Button className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2">
-            <Plus className="size-4" />
-            New Batch
-          </Button>
-        </Link>
+        {canManage && (
+          <Link href="/batches/new">
+            <Button className="bg-emerald-500 hover:bg-emerald-600 text-white gap-2">
+              <Plus className="size-4" />
+              New Batch
+            </Button>
+          </Link>
+        )}
       </div>
 
       {/* Dashboard KPIs */}
@@ -120,13 +125,17 @@ export default function BatchesPage() {
         <Card className="p-12 text-center text-muted-foreground">
           <Calendar className="size-10 mx-auto mb-3 opacity-30" />
           <p className="font-medium">No batches found</p>
-          <p className="text-sm mt-1">Create your first batch to get started.</p>
-          <Link href="/batches/new" className="mt-4 inline-block">
-            <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5">
-              <Plus className="size-3.5" />
-              New Batch
-            </Button>
-          </Link>
+          {canManage && (
+            <>
+              <p className="text-sm mt-1">Create your first batch to get started.</p>
+              <Link href="/batches/new" className="mt-4 inline-block">
+                <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5">
+                  <Plus className="size-3.5" />
+                  New Batch
+                </Button>
+              </Link>
+            </>
+          )}
         </Card>
       ) : (
         <div className="rounded-lg border bg-white overflow-hidden">

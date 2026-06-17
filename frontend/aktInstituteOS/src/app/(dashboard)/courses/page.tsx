@@ -8,6 +8,7 @@ import {
   BookOpen, Clock, IndianRupee, Layers
 } from "lucide-react";
 import { listCourses } from "@/lib/api/courses.api";
+import { usePermissions } from "@/lib/hooks/usePermissions";
 import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -75,6 +76,8 @@ function CourseCard({ course }: { course: CourseSummary }) {
 
 export default function CoursesPage() {
   const [status, setStatus] = useState<CourseStatus | "">("");
+  const { has } = usePermissions();
+  const canCreate = has("COURSE_CREATE");
 
   const { data, isLoading } = useQuery({
     queryKey: ["courses", status],
@@ -92,12 +95,14 @@ export default function CoursesPage() {
             {courses.length} course{courses.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <Link href="/courses/new">
-          <Button className="bg-emerald-500 hover:bg-emerald-600 text-white">
-            <Plus className="size-4" />
-            Add Course
-          </Button>
-        </Link>
+        {canCreate && (
+          <Link href="/courses/new">
+            <Button className="bg-emerald-500 hover:bg-emerald-600 text-white">
+              <Plus className="size-4" />
+              Add Course
+            </Button>
+          </Link>
+        )}
       </div>
 
       <div className="flex items-center gap-3">
@@ -123,7 +128,9 @@ export default function CoursesPage() {
         </div>
       ) : courses.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
-          No courses found. <Link href="/courses/new" className="text-emerald-600 hover:underline">Add your first course.</Link>
+          No courses found.{canCreate && (
+            <> <Link href="/courses/new" className="text-emerald-600 hover:underline">Add your first course.</Link></>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

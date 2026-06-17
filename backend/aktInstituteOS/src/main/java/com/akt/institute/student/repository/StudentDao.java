@@ -22,10 +22,15 @@ public interface StudentDao {
 
     boolean existsByEmailAndInstituteIdAndIdNot(String email, Long instituteId, Long excludeId);
 
+    /**
+     * @param facultyUserId when non-null, restricts results to students enrolled in
+     *                      batches assigned to this faculty user via batch_faculty.
+     */
     List<Student> findWithFilters(Long instituteId, String status, String q,
-                                  int page, int size, String sortField, String sortDir);
+                                  int page, int size, String sortField, String sortDir,
+                                  Long facultyUserId);
 
-    long countWithFilters(Long instituteId, String status, String q);
+    long countWithFilters(Long instituteId, String status, String q, Long facultyUserId);
 
     List<Student> findAllByIds(List<Long> ids);
 

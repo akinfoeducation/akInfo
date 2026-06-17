@@ -3,7 +3,7 @@
 import { use } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Phone, Mail, MapPin, User, GraduationCap, Trash2 } from "lucide-react";
+import { ArrowLeft, Phone, Mail, MapPin, User, GraduationCap, Trash2, IndianRupee, CheckCircle2, AlertCircle, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/select";
 import { StudentStatusBadge } from "@/components/students/StudentStatusBadge";
 import { getStudent, updateStudentStatus, deleteStudent } from "@/lib/api/students.api";
+import { getFacultyStudentFees, type FacultyAdmissionFeeRow } from "@/lib/api/fees.api";
+import { usePermissions } from "@/lib/hooks/usePermissions";
 import type { StudentStatus } from "@/types/student";
 
 const STATUS_OPTIONS: StudentStatus[] = ["ACTIVE", "INACTIVE", "GRADUATED", "DROPPED"];
@@ -52,10 +54,19 @@ export default function StudentDetailPage({
   const studentId = Number(id);
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { isFacultyOnly } = usePermissions();
+  const facultyOnly = isFacultyOnly();
 
   const { data: student, isLoading } = useQuery({
     queryKey: ["student", studentId],
     queryFn: () => getStudent(studentId),
+  });
+
+  // Faculty get scoped fee view; admins don't need this endpoint
+  const { data: facultyFees = [] } = useQuery({
+    queryKey: ["faculty-student-fees", studentId],
+    queryFn:  () => getFacultyStudentFees(studentId),
+    enabled:  facultyOnly,
   });
 
   const statusMutation = useMutation({
@@ -195,6 +206,91 @@ export default function StudentDetailPage({
         <Card className="p-5 space-y-3">
           <h2 className="text-sm font-medium">Notes</h2>
           <p className="text-sm text-muted-foreground whitespace-pre-wrap">{student.notes}</p>
+        </Card>
+      )}
+
+      {/* ── Fee Section (faculty-only, read-only) ── */}
+      {facultyOnly && facultyFees.length > 0 && (
+        <Card className="p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold flex items-center gap-2">
+              <IndianRupee className="size-4 text-amber-500" />
+              Fee Details
+            </h2>
+            <span className="text-xs text-muted-foreground bg-gray-100 px-2 py-0.5 rounded">Read-only</span>
+          </div>
+
+          {facultyFees.map(fee => {
+            const pct = fee.feesAgreed > 0 ? (fee.feesPaid / fee.feesAgreed) * 100 : 0;
+            const statusCfg = {
+              PAID:    { label: "Fully Paid",      cls: "bg-emerald-50 text-emerald-700", icon: CheckCircle2, bar: "bg-emerald-500" },
+              PARTIAL: { label: "Partially Paid",   cls: "bg-amber-50 text-amber-700",     icon: Clock,        bar: "bg-amber-400"   },
+              PENDING: { label: "Payment Pending",  cls: "bg-red-50 text-red-700",         icon: AlertCircle,  bar: "bg-red-400"     },
+            }[fee.feeStatus];
+            const StatusIcon = statusCfg.icon;
+
+            return (
+              <div key={fee.admissionId} className="border border-gray-100 rounded-xl p-4 space-y-4">
+                {/* Batch / course */}
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{fee.batchName ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">{fee.courseName ?? "—"} · {fee.admissionNumber}</p>
+                  </div>
+                  <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${statusCfg.cls}`}>
+                    <StatusIcon className="size-3" />
+                    {statusCfg.label}
+                  </span>
+                </div>
+
+                {/* Fee figures */}
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground">Total Fee</p>
+                    <p className="text-base font-bold text-gray-800">
+                      ₹{fee.feesAgreed.toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                  <div className="bg-emerald-50 rounded-lg p-3">
+                    <p className="text-xs text-emerald-700">Paid</p>
+                    <p className="text-base font-bold text-emerald-800">
+                      ₹{fee.feesPaid.toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                  <div className={`rounded-lg p-3 ${fee.feesDue > 0 ? "bg-red-50" : "bg-gray-50"}`}>
+                    <p className={`text-xs ${fee.feesDue > 0 ? "text-red-700" : "text-muted-foreground"}`}>Due</p>
+                    <p className={`text-base font-bold ${fee.feesDue > 0 ? "text-red-800" : "text-gray-500"}`}>
+                      ₹{fee.feesDue.toLocaleString("en-IN")}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Payment progress bar */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Payment progress</span>
+                    <span>{pct.toFixed(0)}%</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${statusCfg.bar}`}
+                      style={{ width: `${Math.min(pct, 100)}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Meta */}
+                <div className="flex items-center gap-4 text-xs text-muted-foreground pt-1">
+                  {fee.enrollmentDate && (
+                    <span>Enrolled: {fee.enrollmentDate}</span>
+                  )}
+                  {fee.lastPaymentDate && (
+                    <span>Last payment: {fee.lastPaymentDate}</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </Card>
       )}
 

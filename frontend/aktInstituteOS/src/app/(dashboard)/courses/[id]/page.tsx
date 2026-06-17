@@ -29,6 +29,7 @@ import {
   getCourse, updateCourse, deleteCourse,
   createBatch, updateBatch, deleteBatch,
 } from "@/lib/api/courses.api";
+import { usePermissions } from "@/lib/hooks/usePermissions";
 import type { CourseStatus, BatchStatus } from "@/types/course";
 
 // ── schemas ──────────────────────────────────────────────────────────────────
@@ -76,6 +77,8 @@ function BatchRow({
   onDeleted: () => void;
   onUpdated: () => void;
 }) {
+  const { has } = usePermissions();
+  const canEditBatch = has("BATCH_MANAGE");
   const [editing, setEditing] = useState(false);
   const { register, handleSubmit, setValue, reset, formState: { errors, isSubmitting } } = useForm<BatchForm>({
     resolver: zodResolver(batchSchema) as Resolver<BatchForm>,
@@ -166,18 +169,20 @@ function BatchRow({
           </p>
         </div>
       </div>
-      <div className="flex gap-1 shrink-0">
-        <Button variant="ghost" size="icon-sm" onClick={startEdit}>
-          <Edit2 className="size-3.5 text-gray-400" />
-        </Button>
-        <Button
-          variant="ghost" size="icon-sm"
-          disabled={deleteMut.isPending}
-          onClick={() => deleteMut.mutate()}
-        >
-          <Trash2 className="size-3.5 text-red-400" />
-        </Button>
-      </div>
+      {canEditBatch && (
+        <div className="flex gap-1 shrink-0">
+          <Button variant="ghost" size="icon-sm" onClick={startEdit}>
+            <Edit2 className="size-3.5 text-gray-400" />
+          </Button>
+          <Button
+            variant="ghost" size="icon-sm"
+            disabled={deleteMut.isPending}
+            onClick={() => deleteMut.mutate()}
+          >
+            <Trash2 className="size-3.5 text-red-400" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -189,6 +194,10 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
   const courseId = Number(id);
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { has } = usePermissions();
+  const canUpdate = has("COURSE_UPDATE");
+  const canDelete = has("COURSE_DELETE");
+  const canCreateBatch = has("BATCH_MANAGE");
   const [editing, setEditing] = useState(false);
   const [showBatchForm, setShowBatchForm] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -289,12 +298,12 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
         <div className="flex gap-2">
-          {!editing && (
+          {canUpdate && !editing && (
             <Button variant="outline" size="sm" onClick={startEditing}>
               <Edit2 className="size-3.5" /> Edit
             </Button>
           )}
-          {!confirmDelete ? (
+          {canDelete && (!confirmDelete ? (
             <Button variant="outline" size="sm"
               className="text-red-600 border-red-200 hover:bg-red-50"
               onClick={() => setConfirmDelete(true)}>
@@ -309,7 +318,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
               </Button>
               <Button size="sm" variant="outline" onClick={() => setConfirmDelete(false)}>Cancel</Button>
             </div>
-          )}
+          ))}
         </div>
       </div>
 
@@ -384,14 +393,16 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold">Batches</h2>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => { batchForm.reset(); setShowBatchForm((v) => !v); }}
-          >
-            <Plus className="size-3.5" />
-            Add Batch
-          </Button>
+          {canCreateBatch && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => { batchForm.reset(); setShowBatchForm((v) => !v); }}
+            >
+              <Plus className="size-3.5" />
+              Add Batch
+            </Button>
+          )}
         </div>
 
         {/* Add batch form */}

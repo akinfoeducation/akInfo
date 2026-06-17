@@ -76,10 +76,11 @@ public class StudentService {
 
     @Transactional(readOnly = true)
     public ApiResponse<List<StudentSummaryResponse>> list(
-        Long instituteId, String status, String q, int page, int size, String sortField, String sortDir
+        Long instituteId, String status, String q, int page, int size, String sortField, String sortDir,
+        Long facultyUserId
     ) {
-        List<Student> students = studentDao.findWithFilters(instituteId, status, q, page, size, sortField, sortDir);
-        long total = studentDao.countWithFilters(instituteId, status, q);
+        List<Student> students = studentDao.findWithFilters(instituteId, status, q, page, size, sortField, sortDir, facultyUserId);
+        long total = studentDao.countWithFilters(instituteId, status, q, facultyUserId);
         int totalPages = total == 0 ? 0 : (int) Math.ceil((double) total / size);
 
         return ApiResponse.paged(
@@ -94,13 +95,13 @@ public class StudentService {
 
     @Transactional(readOnly = true)
     public ApiResponse<List<StudentSummaryResponse>> search(
-        String query, Long instituteId, String status, int page, int size
+        String query, Long instituteId, String status, int page, int size, Long facultyUserId
     ) {
         var searchResult = searchSyncService.search(query, instituteId, status, page, size);
 
         if (searchResult == null || searchResult.getHits() == null) {
             log.warn("Meilisearch unavailable, falling back to DB search: q={}", query);
-            return list(instituteId, status, query, page, size, "createdAt", "desc");
+            return list(instituteId, status, query, page, size, "createdAt", "desc", facultyUserId);
         }
 
         List<Long> ids = searchResult.getHits().stream()

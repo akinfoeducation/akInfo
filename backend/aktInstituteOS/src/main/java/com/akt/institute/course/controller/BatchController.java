@@ -3,6 +3,7 @@ package com.akt.institute.course.controller;
 import com.akt.institute.course.dto.*;
 import com.akt.institute.course.service.CourseService;
 import com.akt.institute.shared.dto.ApiResponse;
+import com.akt.institute.shared.exception.BusinessException;
 import com.akt.institute.shared.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -30,26 +31,35 @@ public class BatchController {
 
     @GetMapping("/dashboard")
     @PreAuthorize("hasAuthority('BATCH_VIEW')")
-    @Operation(summary = "Batch dashboard — counts and active/upcoming lists")
+    @Operation(summary = "Batch dashboard. Faculty see only their assigned batches.")
     public ResponseEntity<ApiResponse<BatchDashboardResponse>> dashboard(
         @AuthenticationPrincipal UserPrincipal p
     ) {
-        return ResponseEntity.ok(ApiResponse.ok(courseService.batchDashboard(p.getInstituteId())));
+        var result = p.isFacultyOnly()
+            ? courseService.batchDashboardByFaculty(p.getInstituteId(), p.getId())
+            : courseService.batchDashboard(p.getInstituteId());
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     // ── List ─────────────────────────────────────────────────────────────────
 
     @GetMapping
     @PreAuthorize("hasAuthority('BATCH_VIEW')")
-    @Operation(summary = "List all batches with optional status filter")
+    @Operation(summary = "List batches. Faculty are scoped to their assigned batches only.")
     public ResponseEntity<ApiResponse<List<BatchResponse>>> listAll(
         @AuthenticationPrincipal UserPrincipal p,
         @RequestParam(required = false) String status,
         @RequestParam(required = false) Long courseId
     ) {
-        List<BatchResponse> batches = courseId != null
-            ? courseService.listBatches(courseId, p.getInstituteId())
-            : courseService.listAllBatches(p.getInstituteId(), status);
+        List<BatchResponse> batches;
+        if (p.isFacultyOnly()) {
+            // Faculty always see only their own assigned batches
+            batches = courseService.listBatchesByFaculty(p.getInstituteId(), p.getId());
+        } else if (courseId != null) {
+            batches = courseService.listBatches(courseId, p.getInstituteId());
+        } else {
+            batches = courseService.listAllBatches(p.getInstituteId(), status);
+        }
         return ResponseEntity.ok(ApiResponse.ok(batches));
     }
 
@@ -57,7 +67,7 @@ public class BatchController {
 
     @PostMapping
     @PreAuthorize("hasAuthority('BATCH_MANAGE')")
-    @Operation(summary = "Create a new batch (requires courseId in body)")
+    @Operation(summary = "Create a new batch")
     public ResponseEntity<ApiResponse<BatchResponse>> create(
         @AuthenticationPrincipal UserPrincipal p,
         @RequestParam Long courseId,
@@ -72,12 +82,18 @@ public class BatchController {
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('BATCH_VIEW')")
-    @Operation(summary = "Get batch detail with capacity info")
+    @Operation(summary = "Get batch detail. Faculty can only access their assigned batches.")
     public ResponseEntity<ApiResponse<BatchResponse>> getById(
         @AuthenticationPrincipal UserPrincipal p,
         @PathVariable Long id
     ) {
-        return ResponseEntity.ok(ApiResponse.ok(courseService.getBatch(id, p.getInstituteId())));
+        var batch = courseService.getBatch(id, p.getInstituteId());
+        // Faculty can only view batches they are assigned to
+        if (p.isFacultyOnly() && !courseService.isFacultyAssignedToBatch(id, p.getId(), p.getInstituteId())) {
+            throw new BusinessException("Access denied: you are not assigned to this batch",
+                    "BATCH_ACCESS_DENIED", org.springframework.http.HttpStatus.FORBIDDEN);
+        }
+        return ResponseEntity.ok(ApiResponse.ok(batch));
     }
 
     // ── Update ────────────────────────────────────────────────────────────────
@@ -98,7 +114,7 @@ public class BatchController {
 
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAuthority('BATCH_MANAGE')")
-    @Operation(summary = "Update batch status (PLANNED, ACTIVE, COMPLETED, CANCELLED)")
+    @Operation(summary = "Update batch status")
     public ResponseEntity<ApiResponse<BatchResponse>> updateStatus(
         @AuthenticationPrincipal UserPrincipal p,
         @PathVariable Long id,
@@ -125,13 +141,17 @@ public class BatchController {
 
     @GetMapping("/{id}/students")
     @PreAuthorize("hasAuthority('BATCH_VIEW')")
-    @Operation(summary = "Get paginated student list for this batch")
+    @Operation(summary = "Get paginated student list for this batch. Faculty can only access their assigned batches.")
     public ResponseEntity<ApiResponse<List<BatchStudentRow>>> students(
         @AuthenticationPrincipal UserPrincipal p,
         @PathVariable Long id,
         @RequestParam(defaultValue = "0")  int page,
         @RequestParam(defaultValue = "50") int size
     ) {
+        if (p.isFacultyOnly() && !courseService.isFacultyAssignedToBatch(id, p.getId(), p.getInstituteId())) {
+            throw new BusinessException("Access denied: you are not assigned to this batch",
+                    "BATCH_ACCESS_DENIED", org.springframework.http.HttpStatus.FORBIDDEN);
+        }
         return ResponseEntity.ok(ApiResponse.ok(courseService.batchStudents(id, p.getInstituteId(), page, size)));
     }
 

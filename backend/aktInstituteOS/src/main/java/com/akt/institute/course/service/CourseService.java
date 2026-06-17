@@ -61,6 +61,16 @@ public class CourseService {
     }
 
     @Transactional(readOnly = true)
+    public List<CourseSummaryResponse> listCoursesByFaculty(Long instituteId, Long facultyUserId) {
+        List<Course> courses = courseDao.findCoursesByFacultyUserId(instituteId, facultyUserId);
+        courses.forEach(c -> {
+            int count = courseDao.countBatchesByCourseId(c.getId());
+            c.setBatches(count > 0 ? java.util.Collections.nCopies(count, null) : List.of());
+        });
+        return courseMapper.toSummaryList(courses);
+    }
+
+    @Transactional(readOnly = true)
     public CourseResponse getCourse(Long id, Long instituteId) {
         Course course = findCourseOrThrow(id, instituteId);
         course.setBatches(courseDao.findBatchesByCourseId(id, instituteId));
@@ -136,6 +146,44 @@ public class CourseService {
     @Transactional(readOnly = true)
     public List<BatchResponse> listAllBatches(Long instituteId, String status) {
         return courseMapper.toBatchResponseList(courseDao.findBatchesByInstituteId(instituteId, status));
+    }
+
+    @Transactional(readOnly = true)
+    public List<BatchResponse> listBatchesByFaculty(Long instituteId, Long facultyUserId) {
+        return courseMapper.toBatchResponseList(courseDao.findBatchesByFacultyUserId(instituteId, facultyUserId));
+    }
+
+    @Transactional(readOnly = true)
+    public BatchDashboardResponse batchDashboardByFaculty(Long instituteId, Long facultyUserId) {
+        List<BatchResponse> responses = courseMapper.toBatchResponseList(
+                courseDao.findBatchesByFacultyUserId(instituteId, facultyUserId));
+        int active = 0, planned = 0, completed = 0, cancelled = 0, enrolled = 0;
+        for (BatchResponse b : responses) {
+            switch (b.getStatus()) {
+                case "ACTIVE"    -> active++;
+                case "PLANNED"   -> planned++;
+                case "COMPLETED" -> completed++;
+                case "CANCELLED" -> cancelled++;
+            }
+            enrolled += b.getEnrolledCount();
+        }
+        return BatchDashboardResponse.builder()
+                .totalBatches(responses.size()).activeBatches(active)
+                .plannedBatches(planned).completedBatches(completed)
+                .cancelledBatches(cancelled).totalEnrolled(enrolled)
+                .active(responses.stream().filter(b -> "ACTIVE".equals(b.getStatus())).toList())
+                .upcoming(responses.stream().filter(b -> "PLANNED".equals(b.getStatus())).toList())
+                .build();
+    }
+
+    /** Returns true if the faculty user is assigned to the given batch via batch_faculty. */
+    @Transactional(readOnly = true)
+    public boolean isFacultyAssignedToBatch(Long batchId, Long facultyUserId, Long instituteId) {
+        Long count = jdbc.queryForObject(
+                "SELECT COUNT(1) FROM batch_faculty WHERE batch_id=:batchId AND faculty_user_id=:fid AND is_active=true",
+                new MapSqlParameterSource().addValue("batchId", batchId).addValue("fid", facultyUserId),
+                Long.class);
+        return count != null && count > 0;
     }
 
     @Transactional(readOnly = true)

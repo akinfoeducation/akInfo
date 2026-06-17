@@ -106,10 +106,12 @@ public class StudentJdbcDao implements StudentDao {
 
     @Override
     public List<Student> findWithFilters(Long instituteId, String status, String q,
-                                          int page, int size, String sortField, String sortDir) {
+                                          int page, int size, String sortField, String sortDir,
+                                          Long facultyUserId) {
         var sql = new StringBuilder("SELECT " + SELECT_ALL_COLS + " FROM students WHERE deleted_at IS NULL AND institute_id = :instituteId");
         var params = new MapSqlParameterSource("instituteId", instituteId);
         applyFilters(sql, params, status, q);
+        applyFacultyScope(sql, params, facultyUserId);
         String col = sanitizeSortField(sortField);
         String dir = "desc".equalsIgnoreCase(sortDir) ? "DESC" : "ASC";
         sql.append(" ORDER BY ").append(col).append(" ").append(dir);
@@ -119,12 +121,31 @@ public class StudentJdbcDao implements StudentDao {
     }
 
     @Override
-    public long countWithFilters(Long instituteId, String status, String q) {
+    public long countWithFilters(Long instituteId, String status, String q, Long facultyUserId) {
         var sql = new StringBuilder("SELECT COUNT(1) FROM students WHERE deleted_at IS NULL AND institute_id = :instituteId");
         var params = new MapSqlParameterSource("instituteId", instituteId);
         applyFilters(sql, params, status, q);
+        applyFacultyScope(sql, params, facultyUserId);
         Long count = jdbc.queryForObject(sql.toString(), params, Long.class);
         return count == null ? 0L : count;
+    }
+
+    /** When facultyUserId is set, restrict to students enrolled in that faculty's batches. */
+    private static void applyFacultyScope(StringBuilder sql, MapSqlParameterSource params, Long facultyUserId) {
+        if (facultyUserId != null) {
+            sql.append("""
+                 AND id IN (
+                     SELECT DISTINCT a.student_id
+                     FROM admissions a
+                     JOIN batch_faculty bf ON bf.batch_id = a.batch_id
+                     WHERE bf.faculty_user_id = :facultyUserId
+                       AND bf.is_active = true
+                       AND a.student_id IS NOT NULL
+                       AND a.deleted_at IS NULL
+                 )
+                """);
+            params.addValue("facultyUserId", facultyUserId);
+        }
     }
 
     @Override
