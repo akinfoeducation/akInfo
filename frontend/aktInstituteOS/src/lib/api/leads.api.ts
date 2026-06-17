@@ -48,11 +48,6 @@ export async function updateLead(id: number, request: UpdateLeadRequest): Promis
   return data.data;
 }
 
-export async function updateLeadStatus(id: number, status: LeadStatus): Promise<Lead> {
-  const { data } = await apiClient.patch<ApiResponse<Lead>>(`/api/v1/leads/${id}/status`, { status });
-  return data.data;
-}
-
 export async function assignLead(id: number, callerId: number): Promise<Lead> {
   const { data } = await apiClient.patch<ApiResponse<Lead>>(`/api/v1/leads/${id}/assign`, { callerId });
   return data.data;

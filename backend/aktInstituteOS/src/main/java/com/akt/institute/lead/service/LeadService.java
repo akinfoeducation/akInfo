@@ -167,48 +167,6 @@ public class LeadService {
         return leadMapper.toResponse(saved);
     }
 
-    // ── Status ──────────────────────────────────────────────────────────────
-
-    @Transactional
-    public LeadResponse updateStatus(Long id, UpdateLeadStatusRequest request, Long instituteId, UserPrincipal principal) {
-        Lead lead = findOrThrow(id, instituteId);
-        enforceOwnership(lead, principal);
-        LeadStatus newStatus = parseStatus(request.getStatus());
-
-        LeadStatus previousStatus = lead.getStatus();
-        lead.setStatus(newStatus);
-        Instant now = Instant.now();
-        if (newStatus == LeadStatus.CONTACTED || newStatus == LeadStatus.INTERESTED
-            || newStatus == LeadStatus.ADMISSION_INTERESTED || newStatus == LeadStatus.VISIT_PLANNED) {
-            lead.setLastContactedAt(now);
-        }
-        // Stamp milestone timestamps on first transition (never overwrite once set)
-        if (newStatus == LeadStatus.VISIT_PLANNED && lead.getVisitPlannedAt() == null) {
-            lead.setVisitPlannedAt(now);
-        }
-        if (newStatus == LeadStatus.VISIT_DONE && lead.getVisitDoneAt() == null) {
-            lead.setVisitDoneAt(now);
-        }
-        if (newStatus == LeadStatus.BOOKING_CONFIRMED && lead.getBookingConfirmedAt() == null) {
-            lead.setBookingConfirmedAt(now);
-        }
-        if (newStatus == LeadStatus.ADMISSION_DONE && lead.getAdmissionDoneAt() == null) {
-            lead.setAdmissionDoneAt(now);
-        }
-
-        Lead saved = leadDao.save(lead);
-
-        // Record every status change in the activity timeline
-        activityService.record(id, instituteId,
-            "STATUS_CHANGED",
-            "Status changed from " + previousStatus.name().replace("_", " ")
-                + " → " + newStatus.name().replace("_", " "),
-            principal.getId());
-
-        log.info("Lead {} status changed {} → {} by actor {}", id, previousStatus, newStatus, principal.getId());
-        return leadMapper.toResponse(saved);
-    }
-
     // ── Assign ──────────────────────────────────────────────────────────────
 
     @Transactional
@@ -359,16 +317,6 @@ public class LeadService {
         // For counsellors: assigned_to_id = counsellorId (post-handoff via V30 handoff endpoint)
         if (!Objects.equals(lead.getAssignedToId(), principal.getId())) {
             throw new BusinessException("You can only update leads assigned to you", "ACCESS_DENIED", HttpStatus.FORBIDDEN);
-        }
-    }
-
-    static LeadStatus parseStatus(String value) {
-        try {
-            return LeadStatus.valueOf(value.toUpperCase());
-        } catch (IllegalArgumentException e) {
-            throw new BusinessException(
-                "Invalid status '" + value + "'. Valid values: " + Arrays.toString(LeadStatus.values()),
-                "INVALID_LEAD_STATUS", HttpStatus.BAD_REQUEST);
         }
     }
 

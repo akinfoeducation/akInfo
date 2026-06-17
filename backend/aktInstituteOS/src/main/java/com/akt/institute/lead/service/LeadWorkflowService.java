@@ -39,9 +39,9 @@ import java.util.Set;
  *   3. Apply the transition (mutate lead + stamp milestone timestamps)
  *   4. Log a structured activity entry
  *
- * The old LeadService.updateStatus() is kept for backward compatibility but
- * now requires LEAD_STATUS_OVERRIDE permission (admin escape hatch only).
- * All normal workflow transitions go through performAction().
+ * There is no unguarded status-setter: every status change goes through
+ * performAction(). Arbitrary/backward status changes are only possible via the
+ * audited ADMIN_STATUS_OVERRIDE action (requires a reason and is logged).
  */
 @Service
 @RequiredArgsConstructor

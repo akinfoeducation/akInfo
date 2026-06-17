@@ -119,18 +119,6 @@ public class LeadController {
         return ResponseEntity.ok(ApiResponse.ok("Lead updated successfully", lead));
     }
 
-    @PatchMapping("/{id}/status")
-    @PreAuthorize("hasAuthority('LEAD_UPDATE')")
-    @Operation(summary = "Update lead status")
-    public ResponseEntity<ApiResponse<LeadResponse>> updateStatus(
-        @AuthenticationPrincipal UserPrincipal principal,
-        @PathVariable Long id,
-        @Valid @RequestBody UpdateLeadStatusRequest request
-    ) {
-        var lead = leadService.updateStatus(id, request, principal.getInstituteId(), principal);
-        return ResponseEntity.ok(ApiResponse.ok("Lead status updated", lead));
-    }
-
     // ── Assign ──────────────────────────────────────────────────────────────
 
     @PatchMapping("/{id}/assign")
