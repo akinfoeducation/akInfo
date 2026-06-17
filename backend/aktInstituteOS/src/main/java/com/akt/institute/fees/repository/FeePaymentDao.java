@@ -29,4 +29,20 @@ public interface FeePaymentDao {
     long countOverdueAdmissions(Long instituteId);
 
     BigDecimal totalOutstanding(Long instituteId);
+
+    /**
+     * Returns admission-level fee rows for students in batches assigned to the given faculty user.
+     * @param type  "pending" → only dues > 0; "collected" → only fully/partially paid; null/blank → all
+     */
+    List<com.akt.institute.fees.dto.FacultyAdmissionFeeRow> findFacultyAdmissions(
+            Long instituteId, Long facultyUserId, String type, int page, int size);
+
+    long countFacultyAdmissions(Long instituteId, Long facultyUserId, String type);
+
+    /**
+     * Returns admission-level fee row for a specific student, validated against faculty's batch assignment.
+     * Returns empty list if student is not in any of the faculty's assigned batches.
+     */
+    List<com.akt.institute.fees.dto.FacultyAdmissionFeeRow> findFacultyStudentAdmissions(
+            Long instituteId, Long facultyUserId, Long studentId);
 }

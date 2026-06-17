@@ -163,6 +163,29 @@ public class FeePaymentService {
         log.info("Fee payment cancelled: receipt={}", payment.getReceiptNumber());
     }
 
+    // ── Faculty-scoped fee views ──────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public ApiResponse<List<com.akt.institute.fees.dto.FacultyAdmissionFeeRow>> listFacultyAdmissions(
+            Long instituteId, Long facultyUserId, String type, int page, int size) {
+        int capped = Math.min(size, 100);
+        var rows  = feePaymentDao.findFacultyAdmissions(instituteId, facultyUserId, type, page, capped);
+        long total = feePaymentDao.countFacultyAdmissions(instituteId, facultyUserId, type);
+        return ApiResponse.paged(rows,
+                com.akt.institute.shared.dto.PageMeta.builder()
+                        .page(page).size(capped).total(total)
+                        .totalPages(total == 0 ? 0 : (int) Math.ceil((double) total / capped))
+                        .hasNext((long)(page + 1) * capped < total)
+                        .hasPrevious(page > 0)
+                        .build());
+    }
+
+    @Transactional(readOnly = true)
+    public List<com.akt.institute.fees.dto.FacultyAdmissionFeeRow> listFacultyStudentAdmissions(
+            Long instituteId, Long facultyUserId, Long studentId) {
+        return feePaymentDao.findFacultyStudentAdmissions(instituteId, facultyUserId, studentId);
+    }
+
     // ── Internals ────────────────────────────────────────────────────────────
 
     private static PaymentMode parseMode(String value) {

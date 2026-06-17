@@ -25,3 +25,44 @@ export async function collectPayment(request: CreateFeePaymentRequest): Promise<
 export async function cancelPayment(id: number): Promise<void> {
   await apiClient.delete(`/api/v1/fees/${id}`);
 }
+
+// ── Faculty-scoped fee views (read-only) ──────────────────────────────────
+
+export interface FacultyAdmissionFeeRow {
+  admissionId: number;
+  admissionNumber: string;
+  studentId: number | null;
+  studentName: string;
+  phone: string | null;
+  batchId: number;
+  batchName: string | null;
+  courseName: string | null;
+  feesAgreed: number;
+  feesPaid: number;
+  feesDue: number;
+  feeStatus: "PAID" | "PARTIAL" | "PENDING";
+  lastPaymentDate: string | null;
+  enrollmentDate: string | null;
+  admissionStatus: string;
+}
+
+export async function getFacultyFees(
+  type: "all" | "pending" | "collected" = "all",
+  page = 0,
+  size = 50,
+): Promise<ApiResponse<FacultyAdmissionFeeRow[]>> {
+  const { data } = await apiClient.get<ApiResponse<FacultyAdmissionFeeRow[]>>(
+    "/api/v1/fees/faculty",
+    { params: { type: type === "all" ? "" : type, page, size } },
+  );
+  return data;
+}
+
+export async function getFacultyStudentFees(
+  studentId: number,
+): Promise<FacultyAdmissionFeeRow[]> {
+  const { data } = await apiClient.get<ApiResponse<FacultyAdmissionFeeRow[]>>(
+    `/api/v1/fees/faculty/student/${studentId}`,
+  );
+  return data.data ?? [];
+}
