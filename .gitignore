@@ -46,3 +46,9 @@ npm-debug.log*
 # ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# ── Demo / test seed scripts (contain credentials — never commit) ──────────────
+scripts/demo/
+
+# ── Runtime file storage (user uploads — not source) ──────────────────────────
+backend/aktInstituteOS/uploads/
