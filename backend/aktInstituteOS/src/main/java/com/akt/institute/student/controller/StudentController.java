@@ -32,7 +32,7 @@ public class StudentController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('STUDENT_VIEW')")
-    @Operation(summary = "List students with optional filters and pagination")
+    @Operation(summary = "List students. Faculty are automatically scoped to students in their assigned batches.")
     public ResponseEntity<ApiResponse<List<StudentSummaryResponse>>> list(
         @AuthenticationPrincipal UserPrincipal principal,
         @RequestParam(required = false) String status,
@@ -42,14 +42,15 @@ public class StudentController {
         @RequestParam(defaultValue = "createdAt") String sort,
         @RequestParam(defaultValue = "desc") String dir
     ) {
-        size = Math.min(size, 100); // cap page size
-        var result = studentService.list(principal.getInstituteId(), status, q, page, size, sort, dir);
+        size = Math.min(size, 100);
+        Long facultyUserId = principal.isFacultyOnly() ? principal.getId() : null;
+        var result = studentService.list(principal.getInstituteId(), status, q, page, size, sort, dir, facultyUserId);
         return ResponseEntity.ok(result);
     }
 
     @GetMapping("/search")
     @PreAuthorize("hasAuthority('STUDENT_VIEW')")
-    @Operation(summary = "Fast full-text search via Meilisearch (typo-tolerant). Falls back to MySQL if search is unavailable.")
+    @Operation(summary = "Full-text search. Faculty results scoped to their assigned batch students.")
     public ResponseEntity<ApiResponse<List<StudentSummaryResponse>>> search(
         @AuthenticationPrincipal UserPrincipal principal,
         @RequestParam String q,
@@ -58,7 +59,8 @@ public class StudentController {
         @RequestParam(defaultValue = "20") int size
     ) {
         size = Math.min(size, 50);
-        var result = studentService.search(q, principal.getInstituteId(), status, page, size);
+        Long facultyUserId = principal.isFacultyOnly() ? principal.getId() : null;
+        var result = studentService.search(q, principal.getInstituteId(), status, page, size, facultyUserId);
         return ResponseEntity.ok(result);
     }
 

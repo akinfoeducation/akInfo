@@ -1,0 +1,35 @@
+# Profile for workflow integration tests.
+# Datasource is supplied at runtime by the Testcontainers Postgres
+# (see AbstractWorkflowIT @DynamicPropertySource). Flyway runs the REAL
+# migrations against that throwaway database, so these tests exercise the
+# production schema — not a hand-written H2 stand-in.
+spring:
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+  sql:
+    init:
+      mode: never
+
+app:
+  jwt:
+    secret: dGVzdC1zZWNyZXQta2V5LXRoYXQtaXMtbG9uZy1lbm91Z2gtZm9yLUhTMjU2LWluLXRlc3Rpbmct
+    access-token-expiry-ms: 900000
+    refresh-token-expiry-days: 7
+  institute:
+    default-id: 1
+  cors:
+    allowed-origins: http://localhost:3000
+  meilisearch:
+    host: http://localhost:7700
+    master-key: test-key
+  notification:
+    email-enabled: false
+    whatsapp-enabled: false
+
+logging:
+  level:
+    org.flywaydb: WARN
+    com.akt.institute: WARN

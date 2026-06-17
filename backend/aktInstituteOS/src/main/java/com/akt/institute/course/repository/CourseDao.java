@@ -29,6 +29,12 @@ public interface CourseDao {
 
     List<Batch> findBatchesByInstituteId(Long instituteId, String status);
 
+    /** Returns only batches where the given faculty user is assigned via batch_faculty. */
+    List<Batch> findBatchesByFacultyUserId(Long instituteId, Long facultyUserId);
+
+    /** Returns courses that have at least one batch assigned to the given faculty user. */
+    List<Course> findCoursesByFacultyUserId(Long instituteId, Long facultyUserId);
+
     void deleteCourse(Long id);
 
     void deleteBatch(Long id);

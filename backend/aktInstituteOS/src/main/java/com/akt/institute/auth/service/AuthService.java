@@ -1,9 +1,12 @@
 package com.akt.institute.auth.service;
 
+import com.akt.institute.audit.domain.AuditAction;
+import com.akt.institute.audit.service.AuditService;
 import com.akt.institute.auth.domain.User;
 import com.akt.institute.auth.dto.*;
 import com.akt.institute.auth.repository.UserDao;
 import com.akt.institute.institute.repository.InstituteDao;
+import com.akt.institute.session.service.SessionService;
 import com.akt.institute.shared.exception.BusinessException;
 import com.akt.institute.shared.security.JwtService;
 import com.akt.institute.shared.security.UserPrincipal;
@@ -31,6 +34,8 @@ public class AuthService {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
     private final PasswordEncoder passwordEncoder;
+    private final SessionService sessionService;
+    private final AuditService auditService;
 
     @Value("${app.institute.default-id:1}")
     private Long defaultInstituteId;
@@ -80,6 +85,15 @@ public class AuthService {
         );
 
         setRefreshTokenCookie(httpResponse, rawRefreshToken);
+
+        // Track session
+        String tokenHash = String.valueOf(rawRefreshToken.hashCode());
+        sessionService.create(user.getId(), user.getInstituteId(), tokenHash,
+                httpRequest.getHeader("User-Agent"), getClientIp(httpRequest),
+                java.time.Instant.now().plusSeconds(refreshTokenService.getRefreshTokenExpiryDays() * 86400L));
+
+        auditService.log(user.getInstituteId(), user.getId(), AuditAction.LOGIN,
+                "USER", String.valueOf(user.getId()), getClientIp(httpRequest), httpRequest.getHeader("User-Agent"));
 
         log.info("User logged in: userId={}, email={}", user.getId(), user.getEmail());
 

@@ -1,6 +1,7 @@
 package com.akt.institute.fees.controller;
 
 import com.akt.institute.fees.dto.CreateFeePaymentRequest;
+import com.akt.institute.fees.dto.FacultyAdmissionFeeRow;
 import com.akt.institute.fees.dto.FeePaymentResponse;
 import com.akt.institute.fees.dto.FeesSummaryResponse;
 import com.akt.institute.fees.service.FeePaymentService;
@@ -77,5 +78,41 @@ public class FeePaymentController {
     ) {
         feePaymentService.cancel(id, principal.getInstituteId());
         return ResponseEntity.ok(ApiResponse.message("Payment cancelled successfully"));
+    }
+
+    // ── Faculty-scoped fee views (read-only) ──────────────────────────────────
+
+    /**
+     * Returns admission fee rows for students in the calling faculty's assigned batches.
+     * Gated on STUDENT_VIEW since faculty can already view their assigned students.
+     * type: "pending" | "collected" | (blank = all)
+     */
+    @GetMapping("/faculty")
+    @PreAuthorize("hasAuthority('STUDENT_VIEW')")
+    @Operation(summary = "Faculty: list fee records for assigned batch students (read-only, scoped)")
+    public ResponseEntity<ApiResponse<List<FacultyAdmissionFeeRow>>> facultyFees(
+        @AuthenticationPrincipal UserPrincipal principal,
+        @RequestParam(required = false, defaultValue = "") String type,
+        @RequestParam(defaultValue = "0")  int page,
+        @RequestParam(defaultValue = "50") int size
+    ) {
+        size = Math.min(size, 100);
+        return ResponseEntity.ok(feePaymentService.listFacultyAdmissions(
+                principal.getInstituteId(), principal.getId(), type, page, size));
+    }
+
+    /**
+     * Returns fee details for a specific student, validated that the student belongs
+     * to one of the calling faculty's assigned batches.
+     */
+    @GetMapping("/faculty/student/{studentId}")
+    @PreAuthorize("hasAuthority('STUDENT_VIEW')")
+    @Operation(summary = "Faculty: get fee details for a specific assigned student (read-only)")
+    public ResponseEntity<ApiResponse<List<FacultyAdmissionFeeRow>>> facultyStudentFees(
+        @AuthenticationPrincipal UserPrincipal principal,
+        @PathVariable Long studentId
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(feePaymentService.listFacultyStudentAdmissions(
+                principal.getInstituteId(), principal.getId(), studentId)));
     }
 }

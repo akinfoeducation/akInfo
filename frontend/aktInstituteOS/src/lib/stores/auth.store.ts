@@ -13,6 +13,8 @@ interface AuthState {
   setAuth: (user: UserInfo, token: string, expiresIn?: number) => void;
   /** Update token after a silent refresh without changing the user object. */
   updateToken: (token: string, expiresIn: number) => void;
+  /** Merge partial user fields (e.g. after a profile update) without touching the token. */
+  updateUser: (patch: Partial<UserInfo>) => void;
   clearAuth: () => void;
 }
 
@@ -33,6 +35,8 @@ export const useAuthStore = create<AuthState>()(
         setAccessToken(token);
         set({ tokenExpiresAt: Date.now() + expiresIn * 1000 });
       },
+      updateUser: (patch) =>
+        set(state => ({ user: state.user ? { ...state.user, ...patch } : state.user })),
       clearAuth: () => {
         setAccessToken(null);
         document.cookie = "akt_session=; path=/; max-age=0; SameSite=Lax";

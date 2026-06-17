@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -99,7 +100,19 @@ export default function ReportsPage() {
   const today = format(new Date(), "yyyy-MM-dd");
   const som   = format(startOfMonth(new Date()), "yyyy-MM-dd");
 
-  const [activeTab, setActiveTab] = useState<TabKey>("admissions");
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<TabKey>(() => {
+    const t = searchParams.get("tab");
+    return TABS.some((x) => x.key === t) ? (t as TabKey) : "admissions";
+  });
+
+  // Follow ?tab= changes even when the page stays mounted (e.g. clicking a
+  // Finance sidebar link while already on /reports).
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync active tab to URL
+    if (t && TABS.some((x) => x.key === t)) setActiveTab(t as TabKey);
+  }, [searchParams]);
   const [dateRange, setDateRange] = useState<DateRange>({ from: som, to: today });
   const [page, setPage]           = useState(0);
   const [sort, setSort]           = useState("created_at");

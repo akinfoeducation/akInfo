@@ -15,8 +15,12 @@ import {
 
 import { getDashboardSummary, getDashboardRecent } from "@/lib/api/dashboard.api";
 import { getRevenueTrend, getAdmissionsTrend }     from "@/lib/api/reports.api";
-import { useAuthStore }  from "@/lib/stores/auth.store";
-import { Skeleton }      from "@/components/ui/skeleton";
+import { useAuthStore }       from "@/lib/stores/auth.store";
+import { Skeleton }           from "@/components/ui/skeleton";
+import FacultyDashboard       from "@/components/dashboard/FacultyDashboard";
+import CallerDashboard        from "@/components/dashboard/CallerDashboard";
+import CounsellorDashboard    from "@/components/dashboard/CounsellorDashboard";
+import AccountantDashboard    from "@/components/dashboard/AccountantDashboard";
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -178,31 +182,49 @@ function ChartTip({ active, payload, label, money = false }: {
 
 export default function DashboardPage() {
   const user = useAuthStore(s => s.user);
-  const role = user?.roles?.[0] ?? "";
-  const isCounsellor = role === "COUNSELLOR";
-  const isFaculty    = role === "FACULTY";
+  const roles = user?.roles ?? [];
+  const isFaculty    = roles.includes("FACULTY") && !roles.includes("SUPER_ADMIN") && !roles.includes("INSTITUTE_ADMIN");
+  const isCaller     = roles.includes("CALLER") && !roles.includes("SUPER_ADMIN") && !roles.includes("INSTITUTE_ADMIN");
+  const isCounsellor = roles.includes("COUNSELLOR") && !isFaculty && !isCaller;
+  const isAccountant = roles.includes("ACCOUNTANT") && !roles.includes("SUPER_ADMIN") && !roles.includes("INSTITUTE_ADMIN") && !isCounsellor;
 
-  // ── Data fetching ─────────────────────────────────────────────────────
-
+  // All hooks must be called unconditionally — early returns are below
   const { data: summary, isLoading: loadingSum } = useQuery({
     queryKey: ["dashboard-summary"],
     queryFn:  getDashboardSummary,
     staleTime: 60_000,
-    refetchInterval: 5 * 60_000,   // refresh every 5 min in background
+    refetchInterval: 5 * 60_000,
+    enabled: !isFaculty && !isCaller && !isAccountant,
   });
 
-  // Recent activity — lazy loaded (doesn't block initial render)
   const { data: recent, isLoading: loadingRecent } = useQuery({
     queryKey: ["dashboard-recent"],
     queryFn:  getDashboardRecent,
     staleTime: 60_000,
+    enabled: !isFaculty && !isCaller && !isAccountant,
   });
 
-  // Charts — lazy loaded
-  const { data: revTrend    = [] } = useQuery({ queryKey: ["dash-rev-6"],  queryFn: () => getRevenueTrend(6),    staleTime: 5 * 60_000 });
-  const { data: admTrend    = [] } = useQuery({ queryKey: ["dash-adm-6"],  queryFn: () => getAdmissionsTrend(6), staleTime: 5 * 60_000 });
+  const { data: revTrend = [] } = useQuery({
+    queryKey: ["dash-rev-6"],
+    queryFn:  () => getRevenueTrend(6),
+    staleTime: 5 * 60_000,
+    enabled: !isFaculty && !isCaller && !isAccountant,
+  });
+
+  const { data: admTrend = [] } = useQuery({
+    queryKey: ["dash-adm-6"],
+    queryFn:  () => getAdmissionsTrend(6),
+    staleTime: 5 * 60_000,
+    enabled: !isFaculty && !isCaller && !isAccountant,
+  });
 
   const today = format(new Date(), "EEEE, d MMMM yyyy");
+
+  // Role-scoped dashboards — safe to return after all hooks
+  if (isFaculty)    return <FacultyDashboard />;
+  if (isCaller)     return <CallerDashboard />;
+  if (isCounsellor) return <CounsellorDashboard />;
+  if (isAccountant) return <AccountantDashboard />;
 
   // ── Render ────────────────────────────────────────────────────────────
 
@@ -270,11 +292,11 @@ export default function DashboardPage() {
         <SummaryCard
           label="Pending Fees"
           value={summary ? inr(summary.pendingFees) : "—"}
-          sub={summary ? `${summary.overdueCount} students overdue` : undefined}
+          sub={summary ? `${summary.overdueCount} students with dues` : undefined}
           icon={AlertCircle}
           accentBg="bg-amber-50"
           accentIcon="text-amber-600"
-          href="/reports"
+          href="/fees?tab=dues"
           loading={loadingSum}
         />
         <SummaryCard

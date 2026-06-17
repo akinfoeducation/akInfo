@@ -160,6 +160,35 @@ public class CourseJdbcDao implements CourseDao {
         return jdbc.query(sql.toString(), params, BATCH_MAPPER);
     }
 
+    @Override
+    public List<Batch> findBatchesByFacultyUserId(Long instituteId, Long facultyUserId) {
+        String sql = "SELECT " + BATCH_COLS + BATCH_FROM
+                + " JOIN batch_faculty bf ON bf.batch_id = b.id"
+                + " WHERE b.institute_id = :instituteId AND b.deleted_at IS NULL"
+                + "   AND bf.faculty_user_id = :facultyUserId AND bf.is_active = true"
+                + " ORDER BY b.status ASC, b.start_date DESC NULLS LAST, b.name ASC";
+        return jdbc.query(sql,
+                new MapSqlParameterSource()
+                        .addValue("instituteId", instituteId)
+                        .addValue("facultyUserId", facultyUserId),
+                BATCH_MAPPER);
+    }
+
+    @Override
+    public List<Course> findCoursesByFacultyUserId(Long instituteId, Long facultyUserId) {
+        String sql = "SELECT " + COURSE_COLS + " FROM courses WHERE deleted_at IS NULL AND institute_id = :instituteId"
+                + " AND id IN ("
+                + "   SELECT DISTINCT b.course_id FROM batches b"
+                + "   JOIN batch_faculty bf ON bf.batch_id = b.id"
+                + "   WHERE bf.faculty_user_id = :facultyUserId AND bf.is_active = true AND b.deleted_at IS NULL"
+                + " ) ORDER BY name ASC";
+        return jdbc.query(sql,
+                new MapSqlParameterSource()
+                        .addValue("instituteId", instituteId)
+                        .addValue("facultyUserId", facultyUserId),
+                COURSE_MAPPER);
+    }
+
     // ── private helpers ──────────────────────────────────────────────────────
 
     private Course insertCourse(Course c) {
@@ -206,11 +235,11 @@ public class CourseJdbcDao implements CourseDao {
         String sql = """
                 INSERT INTO batches (uuid, institute_id, course_id, name, batch_code,
                     mode, faculty_name, timing,
-                    start_date, end_date, max_capacity, status,
+                    start_date, end_date, max_capacity, available_seats, status,
                     created_at, updated_at, created_by, updated_by)
                 VALUES (:uuid, :instituteId, :courseId, :name, :batchCode,
                     :mode, :facultyName, :timing,
-                    :startDate, :endDate, :maxCapacity, :status,
+                    :startDate, :endDate, :maxCapacity, :maxCapacity, :status,
                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, :createdBy, :updatedBy)
                 """;
         var kh = new GeneratedKeyHolder();

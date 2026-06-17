@@ -35,6 +35,16 @@ public class User extends BaseEntity {
     @Builder.Default
     private Set<Role> roles = new HashSet<>();
 
+    // ── Professional profile fields (added V17) ───────────────────────────
+    private String employeeId;
+    private Long branchId;
+    private Long departmentId;
+    private String designation;
+    private String gender;
+    private java.time.LocalDate dateOfBirth;
+    private java.time.LocalDate joiningDate;
+    private String address;
+
     public String getFullName() {
         return (lastName != null && !lastName.isBlank())
             ? firstName + " " + lastName

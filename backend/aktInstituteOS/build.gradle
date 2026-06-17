@@ -63,6 +63,14 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
     testRuntimeOnly 'com.h2database:h2'
+
+    // BDD: Gherkin .feature files are the executable source of truth for the
+    // CRM workflow scenarios (see src/test/resources/features + workflow/cucumber).
+    testImplementation platform('io.cucumber:cucumber-bom:7.18.1')
+    testImplementation 'io.cucumber:cucumber-java'
+    testImplementation 'io.cucumber:cucumber-spring'
+    testImplementation 'io.cucumber:cucumber-junit-platform-engine'
+    testImplementation 'org.junit.platform:junit-platform-suite'
 }
 
 compileJava {

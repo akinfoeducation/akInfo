@@ -27,6 +27,7 @@ import {
   getBatch, getBatchStudents, getBatchAssignmentHistory,
   patchBatchStatus, updateBatch, deleteBatch,
 } from "@/lib/api/batches.api";
+import { usePermissions } from "@/lib/hooks/usePermissions";
 import { listCourses } from "@/lib/api/courses.api";
 import type { BatchStatus, UpdateBatchRequest } from "@/types/course";
 
@@ -41,6 +42,8 @@ export default function BatchDetailPage() {
   const [editOpen,    setEditOpen]    = useState(false);
   const [deleteOpen,  setDeleteOpen]  = useState(false);
   const [statusOpen,  setStatusOpen]  = useState(false);
+  const { has } = usePermissions();
+  const canManage = has("BATCH_MANAGE");
   const [newStatus,   setNewStatus]   = useState<BatchStatus>("PLANNED");
 
   // Edit form state
@@ -163,19 +166,21 @@ export default function BatchDetailPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => { setNewStatus(batch.status); setStatusOpen(true); }}>
-            Change Status
-          </Button>
-          <Button variant="outline" size="sm" onClick={openEdit}>
-            <Edit2 className="size-3.5 mr-1.5" />
-            Edit
-          </Button>
-          <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteOpen(true)}>
-            <Trash2 className="size-3.5 mr-1.5" />
-            Delete
-          </Button>
-        </div>
+        {canManage && (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => { setNewStatus(batch.status); setStatusOpen(true); }}>
+              Change Status
+            </Button>
+            <Button variant="outline" size="sm" onClick={openEdit}>
+              <Edit2 className="size-3.5 mr-1.5" />
+              Edit
+            </Button>
+            <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteOpen(true)}>
+              <Trash2 className="size-3.5 mr-1.5" />
+              Delete
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Capacity bar + info cards */}

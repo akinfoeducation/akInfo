@@ -30,13 +30,15 @@ public class CourseController {
 
     @GetMapping
     @PreAuthorize("hasAuthority('COURSE_VIEW')")
-    @Operation(summary = "List all courses (optionally filter by status)")
+    @Operation(summary = "List courses. Faculty see only courses containing their assigned batches.")
     public ResponseEntity<ApiResponse<List<CourseSummaryResponse>>> list(
         @AuthenticationPrincipal UserPrincipal principal,
         @RequestParam(required = false) String status
     ) {
-        return ResponseEntity.ok(
-            ApiResponse.ok(courseService.listCourses(principal.getInstituteId(), status)));
+        var result = principal.isFacultyOnly()
+            ? courseService.listCoursesByFaculty(principal.getInstituteId(), principal.getId())
+            : courseService.listCourses(principal.getInstituteId(), status);
+        return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
     @PostMapping

@@ -27,10 +27,32 @@ public class UpdateLeadRequest {
 
     private String source;
 
-    private Long assignedToId;
+    private String deliveryMode;
+
+    @Size(max = 200)
+    private String preferredBatch;
+
+    @Size(max = 200)
+    private String preferredBranch;
+
+    @Size(max = 100)
+    private String parentName;
+
+    @Pattern(regexp = "^[6-9]\\d{9}$", message = "Invalid parent mobile number")
+    private String parentPhone;
+
+    @Email(message = "Invalid parent email format")
+    @Size(max = 255)
+    private String parentEmail;
+
+    private String address;
+
+    private String currentWork;
+
+    private String interestedFor;
 
     @Size(max = 2000)
     private String notes;
 
-    private String nextFollowUpAt;   // accepts "yyyy-MM-dd'T'HH:mm" or full ISO-8601
+    private String nextFollowUpAt;
 }

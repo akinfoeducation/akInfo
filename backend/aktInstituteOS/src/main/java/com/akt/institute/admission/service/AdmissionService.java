@@ -5,6 +5,8 @@ import com.akt.institute.admission.domain.AdmissionStatus;
 import com.akt.institute.admission.dto.*;
 import com.akt.institute.admission.mapper.AdmissionMapper;
 import com.akt.institute.admission.repository.AdmissionDao;
+import com.akt.institute.lead.activity.service.LeadActivityService;
+import com.akt.institute.lead.domain.LeadStage;
 import com.akt.institute.lead.domain.LeadStatus;
 import com.akt.institute.lead.repository.LeadDao;
 import com.akt.institute.notification.event.AdmissionNotificationEvent;
@@ -23,6 +25,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
@@ -40,6 +43,7 @@ public class AdmissionService {
     private final SequenceGenerator sequenceGenerator;
     private final StudentService studentService;
     private final ApplicationEventPublisher eventPublisher;
+    private final LeadActivityService activityService;
 
     // ── Create ──────────────────────────────────────────────────────────────
 
@@ -48,9 +52,16 @@ public class AdmissionService {
         var lead = leadDao.findByIdAndInstituteId(request.getLeadId(), instituteId)
             .orElseThrow(() -> new ResourceNotFoundException("Lead", request.getLeadId()));
 
-        if (lead.getStatus() != LeadStatus.CONVERTED) {
+        // The admission record can be created once the lead has entered the admission
+        // phase. BOOKING_CONFIRMED is the canonical entry; ADMISSION_IN_PROGRESS and
+        // DOCUMENT_PENDING are accepted too, so a lead that already advanced (via the
+        // START_ADMISSION action or the documents-received path) isn't wedged out of
+        // ever creating its admission. The duplicate guard below still prevents a second.
+        if (lead.getStatus() != LeadStatus.BOOKING_CONFIRMED
+                && lead.getStatus() != LeadStatus.ADMISSION_IN_PROGRESS
+                && lead.getStatus() != LeadStatus.DOCUMENT_PENDING) {
             throw new BusinessException(
-                "Lead must be converted before creating an admission. Current status: " + lead.getStatus(),
+                "Lead must be in the admission phase before creating an admission. Current status: " + lead.getStatus(),
                 "LEAD_NOT_CONVERTED", HttpStatus.BAD_REQUEST);
         }
 
@@ -73,6 +84,10 @@ public class AdmissionService {
         }
 
         Admission admission = admissionMapper.toEntity(request);
+        // Defaults — the mapper bypasses the entity's @Builder.Default, and these
+        // columns are NOT NULL, so a missing feesAgreed/feesPaid would 500 otherwise.
+        if (admission.getFeesAgreed() == null) admission.setFeesAgreed(BigDecimal.ZERO);
+        if (admission.getFeesPaid() == null)   admission.setFeesPaid(BigDecimal.ZERO);
         admission.setUuid(UUID.randomUUID().toString());
         admission.setAdmissionNumber(sequenceGenerator.next(instituteId, SequenceGenerator.ADMISSION));
         admission.setInstituteId(instituteId);
@@ -86,6 +101,17 @@ public class AdmissionService {
                 "ASSIGNED", "Assigned at admission creation",
                 com.akt.institute.shared.util.AuditUtil.getCurrentUserId());
         }
+
+        // Creating the admission record only moves the lead INTO the admission.
+        // ADMISSION_DONE is set later — in enroll(), once the student record exists
+        // (the single canonical point a lead becomes ADMITTED on this path).
+        lead.setStatus(LeadStatus.ADMISSION_IN_PROGRESS);
+        leadDao.save(lead);
+
+        // Step 8: Write activity timeline entry
+        activityService.record(lead.getId(), instituteId, "ADMISSION_CREATED",
+            "Admission " + saved.getAdmissionNumber() + " created for " + saved.getFullName(),
+            com.akt.institute.shared.util.AuditUtil.getCurrentUserId());
 
         log.info("Admission created: id={}, number={}, leadId={}", saved.getId(), saved.getAdmissionNumber(), saved.getLeadId());
 
@@ -114,11 +140,11 @@ public class AdmissionService {
 
     @Transactional(readOnly = true)
     public ApiResponse<List<AdmissionSummaryResponse>> list(
-        Long instituteId, String status, String q,
+        Long instituteId, String status, String q, boolean hasDues,
         int page, int size, String sortField, String sortDir
     ) {
-        List<Admission> admissions = admissionDao.findWithFilters(instituteId, status, q, page, size, sortField, sortDir);
-        long total = admissionDao.countWithFilters(instituteId, status, q);
+        List<Admission> admissions = admissionDao.findWithFilters(instituteId, status, q, hasDues, page, size, sortField, sortDir);
+        long total = admissionDao.countWithFilters(instituteId, status, q, hasDues);
         int totalPages = total == 0 ? 0 : (int) Math.ceil((double) total / size);
 
         return ApiResponse.paged(
@@ -156,6 +182,13 @@ public class AdmissionService {
             throw new BusinessException("Cannot change status of a completed admission",
                 "ADMISSION_IS_COMPLETED", HttpStatus.BAD_REQUEST);
         }
+        // An admission can't be marked COMPLETED while fees are still outstanding.
+        if (newStatus == AdmissionStatus.COMPLETED
+                && admission.getFeesDue().compareTo(BigDecimal.ZERO) > 0) {
+            throw new BusinessException(
+                "Cannot complete admission — fees of ₹" + admission.getFeesDue() + " are still due.",
+                "FEES_OUTSTANDING", HttpStatus.BAD_REQUEST);
+        }
 
         admission.setStatus(newStatus);
         Admission saved = admissionDao.save(admission);
@@ -185,7 +218,26 @@ public class AdmissionService {
 
         var student = studentService.create(request, instituteId);
         admission.setStudentId(student.getId());
+        // The student record now exists → the admission is ENROLLED. Don't downgrade an
+        // admission that staff already advanced further (ACTIVE/COMPLETED).
+        if (admission.getStatus() == AdmissionStatus.PENDING
+                || admission.getStatus() == AdmissionStatus.DOCUMENTS_PENDING) {
+            admission.setStatus(AdmissionStatus.ENROLLED);
+        }
         Admission saved = admissionDao.save(admission);
+
+        // The student record now exists → finalize the lead as ADMISSION_DONE / ADMITTED.
+        // This is the single point a lead reaches ADMISSION_DONE via the admission path.
+        leadDao.findByIdAndInstituteId(admission.getLeadId(), instituteId).ifPresent(lead -> {
+            lead.setStatus(LeadStatus.ADMISSION_DONE);
+            lead.setStage(LeadStage.ADMITTED);
+            if (lead.getAdmissionDoneAt() == null) lead.setAdmissionDoneAt(Instant.now());
+            leadDao.save(lead);
+        });
+
+        activityService.record(admission.getLeadId(), instituteId, "STUDENT_CREATED",
+            "Student record created (ID: " + student.getId() + ") from admission " + admission.getAdmissionNumber(),
+            com.akt.institute.shared.util.AuditUtil.getCurrentUserId());
 
         log.info("Student {} enrolled from admission {}", student.getId(), id);
         return admissionMapper.toResponse(saved);

@@ -80,4 +80,16 @@ public class UserPrincipal implements UserDetails {
             .map(GrantedAuthority::getAuthority)
             .collect(Collectors.toSet());
     }
+
+    /** True if the user has the given role code (e.g. "FACULTY", "STUDENT"). */
+    public boolean hasRole(String roleCode) {
+        return roleNames.contains(roleCode);
+    }
+
+    /** True if the user has ONLY faculty-level roles (no admin override). */
+    public boolean isFacultyOnly() {
+        return roleNames.contains("FACULTY")
+            && !roleNames.contains("SUPER_ADMIN")
+            && !roleNames.contains("INSTITUTE_ADMIN");
+    }
 }

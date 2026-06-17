@@ -29,10 +29,35 @@ public class CreateLeadRequest {
 
     private String source;
 
+    @NotNull(message = "Delivery mode is required (ONLINE or OFFLINE)")
+    private String deliveryMode;
+
+    @Size(max = 200)
+    private String preferredBatch;
+
+    @Size(max = 200)
+    private String preferredBranch;
+
+    @Size(max = 100)
+    private String parentName;
+
+    @Pattern(regexp = "^[6-9]\\d{9}$", message = "Invalid parent mobile number")
+    private String parentPhone;
+
+    @Email(message = "Invalid parent email format")
+    @Size(max = 255)
+    private String parentEmail;
+
     private Long assignedToId;
+
+    private String address;
+
+    private String currentWork;
+
+    private String interestedFor;
 
     @Size(max = 2000)
     private String notes;
 
-    private String nextFollowUpAt;   // accepts "yyyy-MM-dd'T'HH:mm" or full ISO-8601
+    private String nextFollowUpAt;
 }
