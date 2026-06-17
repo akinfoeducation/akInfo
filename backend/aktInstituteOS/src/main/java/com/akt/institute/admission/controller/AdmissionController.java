@@ -36,6 +36,7 @@ public class AdmissionController {
         @AuthenticationPrincipal UserPrincipal principal,
         @RequestParam(required = false) String status,
         @RequestParam(required = false) String q,
+        @RequestParam(defaultValue = "false") boolean hasDues,
         @RequestParam(defaultValue = "0")    int page,
         @RequestParam(defaultValue = "20")   int size,
         @RequestParam(defaultValue = "createdAt") String sort,
@@ -43,7 +44,7 @@ public class AdmissionController {
     ) {
         size = Math.min(size, 100);
         return ResponseEntity.ok(
-            admissionService.list(principal.getInstituteId(), status, q, page, size, sort, dir));
+            admissionService.list(principal.getInstituteId(), status, q, hasDues, page, size, sort, dir));
     }
 
     // ── Create ──────────────────────────────────────────────────────────────

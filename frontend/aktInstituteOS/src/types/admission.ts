@@ -104,4 +104,5 @@ export interface AdmissionListParams {
   dir?: string;
   status?: AdmissionStatus | "";
   q?: string;
+  hasDues?: boolean;
 }

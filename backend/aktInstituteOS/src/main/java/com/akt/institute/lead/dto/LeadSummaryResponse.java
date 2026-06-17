@@ -20,6 +20,15 @@ public class LeadSummaryResponse {
     private String courseInterested;
     private String source;
     private String status;
+    private String stage;
+    private String deliveryMode;
+    private String preferredBatch;
+    private Long assignedToId;
+    private Instant assignedAt;
+    private Long    callerId;
+    private Long    counsellorId;
+    private String currentWork;
+    private String interestedFor;
     private Instant nextFollowUpAt;
     private Instant lastContactedAt;
     private Instant createdAt;

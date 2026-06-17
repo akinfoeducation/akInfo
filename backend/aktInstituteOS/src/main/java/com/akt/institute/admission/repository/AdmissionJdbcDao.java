@@ -70,12 +70,12 @@ public class AdmissionJdbcDao implements AdmissionDao {
     }
 
     @Override
-    public List<Admission> findWithFilters(Long instituteId, String status, String q,
+    public List<Admission> findWithFilters(Long instituteId, String status, String q, boolean hasDues,
                                             int page, int size, String sortField, String sortDir) {
         var sql = new StringBuilder("SELECT " + SELECT_COLS
                 + " FROM admissions WHERE deleted_at IS NULL AND institute_id = :instituteId");
         var params = new MapSqlParameterSource("instituteId", instituteId);
-        applyFilters(sql, params, status, q);
+        applyFilters(sql, params, status, q, hasDues);
         String col = sanitizeSortField(sortField);
         String dir = "desc".equalsIgnoreCase(sortDir) ? "DESC" : "ASC";
         sql.append(" ORDER BY ").append(col).append(" ").append(dir);
@@ -85,10 +85,10 @@ public class AdmissionJdbcDao implements AdmissionDao {
     }
 
     @Override
-    public long countWithFilters(Long instituteId, String status, String q) {
+    public long countWithFilters(Long instituteId, String status, String q, boolean hasDues) {
         var sql = new StringBuilder("SELECT COUNT(1) FROM admissions WHERE deleted_at IS NULL AND institute_id = :instituteId");
         var params = new MapSqlParameterSource("instituteId", instituteId);
-        applyFilters(sql, params, status, q);
+        applyFilters(sql, params, status, q, hasDues);
         Long count = jdbc.queryForObject(sql.toString(), params, Long.class);
         return count == null ? 0L : count;
     }
@@ -105,10 +105,14 @@ public class AdmissionJdbcDao implements AdmissionDao {
     // ── private helpers ──────────────────────────────────────────────────────
 
     private static void applyFilters(StringBuilder sql, MapSqlParameterSource params,
-                                     String status, String q) {
+                                     String status, String q, boolean hasDues) {
         if (status != null && !status.isBlank()) {
             sql.append(" AND status = :status");
             params.addValue("status", status);
+        }
+        if (hasDues) {
+            // Only show admissions where outstanding > 0 and not cancelled/completed with no balance
+            sql.append(" AND fees_agreed > fees_paid AND status NOT IN ('CANCELLED')");
         }
         if (q != null && !q.isBlank()) {
             String pattern = "%" + q.toLowerCase().trim() + "%";

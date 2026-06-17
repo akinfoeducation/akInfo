@@ -6,6 +6,8 @@ const SOURCE_MAP: Record<LeadSource, { label: string; className: string }> = {
   SOCIAL_MEDIA: { label: "Social",      className: "bg-pink-50 text-pink-700" },
   WEBSITE:      { label: "Website",     className: "bg-blue-50 text-blue-700" },
   GOOGLE_ADS:   { label: "Google Ads",  className: "bg-yellow-50 text-yellow-700" },
+  PHONE:        { label: "Phone",       className: "bg-emerald-50 text-emerald-700" },
+  ONLINE:       { label: "Online",      className: "bg-sky-50 text-sky-700" },
   OTHER:        { label: "Other",       className: "bg-gray-100 text-gray-600" },
 };
 

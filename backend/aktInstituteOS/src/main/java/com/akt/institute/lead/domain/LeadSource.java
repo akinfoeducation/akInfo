@@ -6,5 +6,7 @@ public enum LeadSource {
     SOCIAL_MEDIA,
     WEBSITE,
     GOOGLE_ADS,
+    PHONE,       // inbound phone enquiry
+    ONLINE,      // generic online / web form
     OTHER
 }

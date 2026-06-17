@@ -16,10 +16,10 @@ public interface AdmissionDao {
 
     java.util.Optional<Long> findAdmissionIdByLeadId(Long leadId, Long instituteId);
 
-    List<Admission> findWithFilters(Long instituteId, String status, String q,
+    List<Admission> findWithFilters(Long instituteId, String status, String q, boolean hasDues,
                                     int page, int size, String sortField, String sortDir);
 
-    long countWithFilters(Long instituteId, String status, String q);
+    long countWithFilters(Long instituteId, String status, String q, boolean hasDues);
 
     long countByInstituteIdAndStatus(Long instituteId, AdmissionStatus status);
 }
