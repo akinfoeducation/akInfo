@@ -16,6 +16,26 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+
+    # The CRM workflow Cucumber suite boots the full app against a real Postgres
+    # (CucumberSpringConfiguration creates a throwaway akt_institute_test DB and
+    # runs the real Flyway migrations). Provide a matching DB; connection is
+    # supplied via the IT_DB_* env on the test step below.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: akt_user
+          POSTGRES_PASSWORD: devpassword123
+          POSTGRES_DB: akt_institute
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U akt_user -d akt_institute"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -29,6 +49,12 @@ jobs:
       - name: Run tests
         run: ./gradlew test --no-daemon
         working-directory: backend/aktInstituteOS
+        env:
+          IT_DB_HOST: localhost
+          IT_DB_PORT: 5432
+          IT_DB_USER: akt_user
+          IT_DB_PASSWORD: devpassword123
+          IT_DB_NAME: akt_institute
 
       - name: Upload test report on failure
         if: failure()
