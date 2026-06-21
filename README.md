@@ -171,13 +171,3 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 # Database backup
 docker exec akt-postgres pg_dump -U $DB_USER $DB_NAME > backup_$(date +%Y%m%d).sql
 ```
-
----
-
-## Default Login
-
-After first deploy, login with:
-
-- **URL:** `https://yourdomain.com`
-- **Username:** `superadmin`
-- **Password:** `Admin@1234` ← **Change immediately in Settings**
