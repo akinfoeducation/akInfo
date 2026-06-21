@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { selectLabel } from "@/lib/ui/select-label";
 
 const schema = z.object({
   firstName:   z.string().min(1, "First name is required").max(100),
@@ -138,7 +139,7 @@ export default function NewUserPage() {
             </Field>
             <Field label="Branch">
               <Select value={branchId} onValueChange={(v) => setBranchId(v ?? "")}>
-                <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select branch">{selectLabel(branches ?? [], b => b.name, "Select branch")}</SelectValue></SelectTrigger>
                 <SelectContent>
                   {(branches ?? []).map((b) => (
                     <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
@@ -148,7 +149,7 @@ export default function NewUserPage() {
             </Field>
             <Field label="Department">
               <Select value={departmentId} onValueChange={(v) => setDepartmentId(v ?? "")}>
-                <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select department">{selectLabel(departments ?? [], d => d.name, "Select department")}</SelectValue></SelectTrigger>
                 <SelectContent>
                   {(departments ?? []).map((d) => (
                     <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>

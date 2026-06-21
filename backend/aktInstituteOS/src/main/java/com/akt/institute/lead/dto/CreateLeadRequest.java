@@ -6,7 +6,9 @@ import lombok.Data;
 @Data
 public class CreateLeadRequest {
 
-    @NotBlank(message = "First name is required")
+    // Name is optional at intake — leads from ads/imports often arrive with only a
+    // number. When blank, the service falls back to the phone number as a placeholder
+    // (the caller fills in the real name during qualification).
     @Size(max = 100)
     private String firstName;
 
@@ -29,7 +31,9 @@ public class CreateLeadRequest {
 
     private String source;
 
-    @NotNull(message = "Delivery mode is required (ONLINE or OFFLINE)")
+    // Delivery mode is captured during qualification, not at intake — it's generally
+    // unknown when the lead first arrives. It becomes required before the lead can be
+    // advanced (visit/booking/handoff/admission), enforced in the workflow services.
     private String deliveryMode;
 
     @Size(max = 200)

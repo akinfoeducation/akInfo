@@ -219,7 +219,12 @@ function StudentVisitedPanel({ onSubmit, onCancel, isPending }: {
         <label className="text-xs font-medium text-emerald-800">Assign Counsellor *</label>
         <Select value={counsellorId} onValueChange={(v) => setCounsellorId(v ?? "")}>
           <SelectTrigger className="bg-white border-emerald-200">
-            <SelectValue placeholder="Select counsellor…" />
+            <SelectValue placeholder="Select counsellor…">
+              {(v) => {
+                const c = counsellors.find(x => String(x.id) === v);
+                return v ? (c ? counsellorLabel(c) : v) : "Select counsellor…";
+              }}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {counsellors.map(c => (
@@ -266,11 +271,18 @@ function ReassignCounsellorPanel({ onSubmit, onCancel, isPending }: {
     <div className="space-y-3 p-4 rounded-lg border bg-sky-50/40 border-sky-200">
       <p className="text-xs font-semibold text-sky-800">Reassign to another Counsellor</p>
       <Select value={counsellorId} onValueChange={(v) => setCounsellorId(v ?? "")}>
-        <SelectTrigger className="bg-white"><SelectValue placeholder="Select counsellor…" /></SelectTrigger>
+        <SelectTrigger className="bg-white">
+          <SelectValue placeholder="Select counsellor…">
+            {(v) => {
+              const c = counsellors.find(x => String(x.id) === v);
+              return v ? (c ? counsellorLabel(c) : v) : "Select counsellor…";
+            }}
+          </SelectValue>
+        </SelectTrigger>
         <SelectContent>
           {counsellors.map(c => (
             <SelectItem key={c.id} value={String(c.id)}>
-              {c.fullName ?? `${c.firstName} ${c.lastName ?? ""}`.trim()}
+              {counsellorLabel(c)}
             </SelectItem>
           ))}
         </SelectContent>

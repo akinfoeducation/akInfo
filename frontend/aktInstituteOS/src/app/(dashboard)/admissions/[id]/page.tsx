@@ -35,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { selectLabel } from "@/lib/ui/select-label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AdmissionStatusBadge } from "@/components/admissions/AdmissionStatusBadge";
 import {
@@ -540,7 +541,9 @@ export default function AdmissionDetailPage({ params }: { params: Promise<{ id: 
                       onValueChange={(v) => setSelectedBatchId(v === "__none" ? null : Number(v))}
                     >
                       <SelectTrigger className="flex-1">
-                        <SelectValue placeholder="Select a batch…" />
+                        <SelectValue placeholder="Select a batch…">
+                          {selectLabel(courseBatches, b => b.name, "Select a batch…", { "__none": "— Select batch —" })}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none">— Select batch —</SelectItem>

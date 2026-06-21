@@ -5,10 +5,11 @@ import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
-  BadgeCheck, CheckCircle2, XCircle, Eye, ExternalLink,
+  BadgeCheck, CheckCircle2, XCircle, Eye,
   ChevronLeft, ChevronRight, Inbox, Loader2,
 } from "lucide-react";
 import { listBookings, verifyPayment, cancelBooking } from "@/lib/api/leads.api";
+import { PaymentProofView } from "@/components/bookings/PaymentProofView";
 import { usePermissions } from "@/lib/hooks/usePermissions";
 import type { AdmissionBooking } from "@/types/lead";
 import { Button } from "@/components/ui/button";
@@ -269,26 +270,12 @@ export default function PaymentsPage() {
             <DialogTitle>Payment proof</DialogTitle>
           </DialogHeader>
           {proofTarget?.paymentProofUrl && (
-            <div className="space-y-3">
-              <div className="overflow-hidden rounded-lg border bg-gray-50">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  key={proofTarget.id}
-                  src={proofTarget.paymentProofUrl}
-                  alt="Payment proof"
-                  className="max-h-[60vh] w-full object-contain"
-                  onError={(e) => { (e.currentTarget.style.display = "none"); }}
-                />
-              </div>
-              <a
-                href={proofTarget.paymentProofUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-sm text-emerald-700 hover:underline"
-              >
-                <ExternalLink className="size-3.5" /> Open original
-              </a>
-            </div>
+            <PaymentProofView
+              key={proofTarget.id}
+              bookingId={proofTarget.id}
+              paymentProofUrl={proofTarget.paymentProofUrl}
+              mode="preview"
+            />
           )}
         </DialogContent>
       </Dialog>

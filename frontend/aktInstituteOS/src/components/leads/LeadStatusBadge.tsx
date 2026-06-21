@@ -12,6 +12,7 @@ const STATUS_MAP: Record<LeadStatus, { label: string; className: string }> = {
   NOT_CONNECTED:          { label: "Not Connected",         className: "bg-slate-50 text-slate-600 border-slate-300" },
   NOT_INTERESTED:         { label: "Not Interested",        className: "bg-red-50 text-red-600 border-red-200" },
   NOT_REACHABLE:          { label: "Not Reachable",         className: "bg-rose-50 text-rose-600 border-rose-200" },
+  INVALID:                { label: "Invalid",               className: "bg-slate-100 text-slate-600 border-slate-300" },
   ADMISSION_INTERESTED:   { label: "Admission Interested",  className: "bg-violet-50 text-violet-700 border-violet-200" },
   PAYMENT_PENDING:        { label: "Payment Pending",       className: "bg-yellow-50 text-yellow-700 border-yellow-200" },
   PAYMENT_VERIFIED:       { label: "Payment Verified",      className: "bg-lime-50 text-lime-700 border-lime-200" },

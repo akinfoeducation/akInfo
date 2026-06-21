@@ -209,3 +209,73 @@ Feature: CRM lead-to-admission workflow
     Then the batch seat is restored
     When the counsellor books the lead onto the second batch and the accountant verifies
     Then the second batch has one seat deducted
+
+  # H2 — a booked lead cannot be closed directly; the booking must be cancelled first
+  Scenario: A confirmed lead cannot be marked not interested while it holds a booking
+    Given a lead at BOOKING_CONFIRMED
+    When the counsellor tries to mark the lead not interested
+    Then the request is rejected as ACTIVE_BOOKING_EXISTS
+    When the booking is cancelled
+    And the counsellor marks the lead not interested
+    Then the lead status is NOT_INTERESTED
+    And the lead stage is DEAD
+
+  # H2 — schedule-follow-up must not pull a booked lead back into the call phase
+  Scenario: Schedule follow-up is rejected on a confirmed lead
+    Given a lead at BOOKING_CONFIRMED
+    When the counsellor tries to schedule a follow-up
+    Then the request is rejected as INVALID_WORKFLOW_TRANSITION
+
+  # C3 — releasing a booked lead returns its seat to the pool
+  Scenario: Branch transfer of a confirmed lead restores the seat
+    Given a lead at BOOKING_CONFIRMED
+    When the admin transfers the lead to another branch
+    Then the lead status is CLOSED
+    And the batch seat is restored
+
+  # C3 — cancelling the admission returns the seat its booking reserved
+  Scenario: Cancelling an admission restores the seat
+    Given a lead at BOOKING_CONFIRMED
+    When the counsellor creates the admission record
+    And the admission is cancelled
+    Then the batch seat is restored
+
+  # C6 — counsellors must never verify a payment (Accountant/Admin only)
+  Scenario: A counsellor cannot verify a payment
+    Given a lead handed off to the counsellor at VISIT_DONE
+    When the counsellor starts fee negotiation
+    And the counsellor creates a booking and uploads payment proof
+    And the counsellor tries to verify the booking
+    Then the request is rejected as ACCESS_DENIED
+
+  # C6 — counsellors may cancel a pending booking (no money has moved yet)
+  Scenario: A counsellor can cancel a pending booking
+    Given a lead handed off to the counsellor at VISIT_DONE
+    When the counsellor starts fee negotiation
+    And the counsellor creates a booking and uploads payment proof
+    And the counsellor cancels the booking
+    Then the lead status is ADMISSION_INTERESTED
+
+  # C6 — counsellors may NOT cancel a confirmed booking (financial reversal)
+  Scenario: A counsellor cannot cancel a confirmed booking
+    Given a lead at BOOKING_CONFIRMED
+    When the counsellor tries to cancel the booking
+    Then the request is rejected as CONFIRMED_CANCEL_DENIED
+
+  # C6 — an accountant may cancel a confirmed booking; the seat is restored
+  Scenario: An accountant can cancel a confirmed booking and restore the seat
+    Given a lead at BOOKING_CONFIRMED
+    When the accountant cancels the booking
+    Then the batch seat is restored
+    And the lead status is ADMISSION_INTERESTED
+
+  # C4 / C5 — legacy unguarded backdoors are gone
+  Scenario: The legacy not-connected backdoor endpoint is removed
+    Given a new OFFLINE lead assigned to the caller
+    When a caller hits the removed not-connected endpoint
+    Then the endpoint no longer exists
+
+  Scenario: The legacy convert backdoor endpoint is removed
+    Given a new OFFLINE lead assigned to the caller
+    When a counsellor hits the removed convert endpoint
+    Then the endpoint no longer exists

@@ -19,6 +19,7 @@ import { Card } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { selectLabel } from "@/lib/ui/select-label";
 import { createAdmission } from "@/lib/api/admissions.api";
 import { listCourses } from "@/lib/api/courses.api";
 import { listAllBatches } from "@/lib/api/batches.api";
@@ -263,7 +264,9 @@ function NewAdmissionForm() {
               disabled={!selectedCourse}
             >
               <SelectTrigger className="w-full">
-                <SelectValue placeholder={selectedCourse ? "Select a batch (optional)…" : "Select a course first"} />
+                <SelectValue placeholder={selectedCourse ? "Select a batch (optional)…" : "Select a course first"}>
+                  {selectLabel(availableBatches, b => b.name, selectedCourse ? "Select a batch (optional)…" : "Select a course first", { "__skip": "— Skip for now —" })}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent className="w-auto min-w-[var(--anchor-width)]">
                 <SelectItem value="__skip">— Skip for now —</SelectItem>

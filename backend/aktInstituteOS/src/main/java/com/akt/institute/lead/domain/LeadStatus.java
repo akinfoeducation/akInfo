@@ -15,6 +15,7 @@ public enum LeadStatus {
     NOT_CONNECTED,           // single failed-call → retry pool after 30 min
     NOT_INTERESTED,
     NOT_REACHABLE,
+    INVALID,                 // wrong number / fake / unusable contact (caller disposition)
 
     // ── Remote booking path (Caller owns until VISIT_DONE / BOOKING_CONFIRMED) ─
     ADMISSION_INTERESTED,    // caller confirmed interest remotely
@@ -42,5 +43,5 @@ public enum LeadStatus {
      * deliberately excluded — an already-enrolled student keeps blocking.
      */
     public static final Set<LeadStatus> ROUTABLE_TERMINAL =
-        Set.of(NOT_INTERESTED, NOT_REACHABLE, CLOSED);
+        Set.of(NOT_INTERESTED, NOT_REACHABLE, CLOSED, INVALID);
 }

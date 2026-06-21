@@ -34,7 +34,7 @@ public enum LeadStage {
         if (status == null) return CALLER_PIPELINE;
         return switch (status) {
             case ADMISSION_DONE                                      -> ADMITTED;
-            case NOT_INTERESTED, NOT_REACHABLE, CLOSED              -> DEAD;
+            case NOT_INTERESTED, NOT_REACHABLE, CLOSED, INVALID     -> DEAD;
             case VISIT_DONE, FOLLOW_UP_AFTER_VISIT, NEGOTIATION,
                  DOCUMENT_PENDING, ADMISSION_IN_PROGRESS             -> COUNSELLOR_PIPELINE;
             default                                                  -> CALLER_PIPELINE;

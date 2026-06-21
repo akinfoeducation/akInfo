@@ -42,6 +42,14 @@ public class AdmissionBookingService {
         Lead lead = leadDao.findByIdAndInstituteId(leadId, instituteId)
             .orElseThrow(() -> new ResourceNotFoundException("Lead", leadId));
 
+        // Delivery mode must be set during qualification before a booking can be made —
+        // the ONLINE/OFFLINE split drives the post-booking handoff path.
+        if (lead.getDeliveryMode() == null) {
+            throw new BusinessException(
+                "Set the lead's delivery mode (Online/Offline) before creating a booking.",
+                "DELIVERY_MODE_REQUIRED", HttpStatus.BAD_REQUEST);
+        }
+
         // Callers and counsellors can only book leads assigned to them
         if (!hasAssignPermission && !java.util.Objects.equals(lead.getAssignedToId(), actorId)) {
             throw new BusinessException(
@@ -101,7 +109,16 @@ public class AdmissionBookingService {
     }
 
     @Transactional
-    public BookingResponse verifyPayment(Long bookingId, Long instituteId, Long actorId) {
+    public BookingResponse verifyPayment(Long bookingId, Long instituteId, Long actorId, boolean actorIsCounsellor) {
+        // Separation of duties (C6): a counsellor must NEVER verify a payment, regardless of any
+        // permission grant. This is enforced primarily by @PreAuthorize('BOOKING_VERIFY'); this
+        // role check is defense-in-depth against permission drift.
+        if (actorIsCounsellor) {
+            throw new BusinessException(
+                "Counsellors cannot verify payments. Verification must be done by an Accountant or Admin.",
+                "COUNSELLOR_CANNOT_VERIFY", HttpStatus.FORBIDDEN);
+        }
+
         AdmissionBooking booking = findOrThrow(bookingId, instituteId);
 
         if (booking.getPaymentProofUrl() == null) {
@@ -161,8 +178,19 @@ public class AdmissionBookingService {
     // ── Cancel Booking ────────────────────────────────────────────────────────
 
     @Transactional
-    public BookingResponse cancelBooking(Long bookingId, Long instituteId, Long actorId, String reason) {
+    public BookingResponse cancelBooking(Long bookingId, Long instituteId, Long actorId, String reason,
+                                         boolean canCancelConfirmed) {
         AdmissionBooking booking = findOrThrow(bookingId, instituteId);
+
+        // Separation of duties (C6): cancelling a CONFIRMED booking reverses a verified payment and
+        // restores a seat — a financial action restricted to Accountant/Admin (holders of
+        // BOOKING_VERIFY). Counsellors may only cancel PAYMENT_PENDING bookings (no money moved yet).
+        if (booking.getBookingStatus() == BookingStatus.BOOKING_CONFIRMED && !canCancelConfirmed) {
+            throw new BusinessException(
+                "Cancelling a confirmed booking reverses a verified payment — only an Accountant or "
+                    + "Admin can do this.",
+                "CONFIRMED_CANCEL_DENIED", HttpStatus.FORBIDDEN);
+        }
 
         if (admissionDao.existsByLeadIdAndInstituteId(booking.getLeadId(), instituteId)) {
             throw new BusinessException(
@@ -223,6 +251,29 @@ public class AdmissionBookingService {
         return ApiResponse.paged(items, PageMeta.builder()
             .page(page).size(size).total(total).totalPages(totalPages)
             .hasNext((long) (page + 1) * size < total).hasPrevious(page > 0).build());
+    }
+
+    /**
+     * Resolve the private storage key for a booking's payment proof, enforcing tenant isolation.
+     * Payment proofs are financial documents — this is the ONLY path to them, and it requires the
+     * caller to be authenticated and the booking to belong to their institute.
+     *
+     * @return the relative storage key to pass to {@code FileStorageService.loadPrivate}
+     * @throws BusinessException 404 if no proof, or 400 if the proof is an external URL (open directly)
+     */
+    @Transactional(readOnly = true)
+    public String getProofKeyForDownload(Long bookingId, Long instituteId) {
+        AdmissionBooking booking = findOrThrow(bookingId, instituteId);
+        String proof = booking.getPaymentProofUrl();
+        if (proof == null || proof.isBlank()) {
+            throw new ResourceNotFoundException("Payment proof for booking", bookingId);
+        }
+        if (proof.startsWith("http://") || proof.startsWith("https://")) {
+            throw new BusinessException(
+                "This payment proof is an external link — open it directly.",
+                "EXTERNAL_PROOF", HttpStatus.BAD_REQUEST);
+        }
+        return proof;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

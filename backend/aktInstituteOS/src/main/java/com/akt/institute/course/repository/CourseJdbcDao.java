@@ -37,7 +37,7 @@ public class CourseJdbcDao implements CourseDao {
     private static final String BATCH_COLS = """
             b.id, b.uuid, b.institute_id, b.course_id, b.name, b.batch_code,
             b.mode, b.faculty_name, b.timing,
-            b.start_date, b.end_date, b.max_capacity, b.status, b.created_at, b.deleted_at,
+            b.start_date, b.end_date, b.max_capacity, b.available_seats, b.status, b.created_at, b.deleted_at,
             c.name AS course_name, c.code AS course_code,
             COALESCE(ec.enrolled_count, 0) AS enrolled_count
             """;
@@ -319,6 +319,8 @@ public class CourseJdbcDao implements CourseDao {
         if (ed != null) b.setEndDate(ed.toLocalDate());
         int cap = rs.getInt("max_capacity");
         if (!rs.wasNull()) b.setMaxCapacity(cap);
+        int avail = rs.getInt("available_seats");
+        if (!rs.wasNull()) b.setAvailableSeats(avail);
         String status = rs.getString("status");
         if (status != null) b.setStatus(BatchStatus.valueOf(status));
         b.setCreatedAt(toInstant(rs.getTimestamp("created_at")));

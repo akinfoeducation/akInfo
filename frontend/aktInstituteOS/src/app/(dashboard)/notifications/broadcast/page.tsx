@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { selectLabel } from "@/lib/ui/select-label";
 import { sendBroadcast } from "@/lib/api/notifications.api";
 import { listCourses } from "@/lib/api/courses.api";
 import { listAllBatches } from "@/lib/api/batches.api";
@@ -162,7 +163,7 @@ export default function BroadcastPage() {
                 value={watch("courseId") ? String(watch("courseId")) : "__all"}
                 onValueChange={(v) => setValue("courseId", v === "__all" ? undefined : Number(v))}
               >
-                <SelectTrigger><SelectValue placeholder="All courses" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="All courses">{selectLabel(courses, c => c.name, "All courses", { "__all": "All courses" })}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all">All courses</SelectItem>
                   {courses.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
@@ -175,7 +176,7 @@ export default function BroadcastPage() {
                 value={watch("batchId") ? String(watch("batchId")) : "__all"}
                 onValueChange={(v) => setValue("batchId", v === "__all" ? undefined : Number(v))}
               >
-                <SelectTrigger><SelectValue placeholder="All batches" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="All batches">{selectLabel(batches, b => b.name, "All batches", { "__all": "All batches" })}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all">All batches</SelectItem>
                   {batches.map((b) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}

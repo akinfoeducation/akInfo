@@ -39,12 +39,19 @@ public class CounsellorHandoffService {
     private final LeadMapper          leadMapper;
     private final LeadActivityService activityService;
     private final LeadTransferDao     transferDao;
+    private final com.akt.institute.auth.service.UserAccessValidator userAccessValidator;
+
+    private static final String COUNSELLOR_ROLE = "COUNSELLOR";
 
     // ── Handoff to Counsellor ─────────────────────────────────────────────────
 
     @Transactional
     public LeadResponse handoffToCounsellor(Long leadId, HandoffRequest request,
                                              Long instituteId, Long actorId) {
+        // C1: the counsellor id comes from the request body — validate it's a real, active
+        // COUNSELLOR in this institute before we transfer ownership to it.
+        userAccessValidator.requireActiveUserWithRole(request.getCounsellorId(), instituteId, COUNSELLOR_ROLE);
+
         Lead lead = leadDao.findByIdAndInstituteId(leadId, instituteId)
             .orElseThrow(() -> new ResourceNotFoundException("Lead", leadId));
 
@@ -52,6 +59,15 @@ public class CounsellorHandoffService {
             throw new BusinessException(
                 "Lead is already assigned to counsellor ID " + lead.getCounsellorId(),
                 "ALREADY_HANDED_OFF", HttpStatus.CONFLICT);
+        }
+
+        // Delivery mode must be set before handoff. Without it the mode-aware gate
+        // below falls through (neither OFFLINE nor ONLINE) and skips the status check
+        // entirely — so this guard also closes that latent gap.
+        if (lead.getDeliveryMode() == null) {
+            throw new BusinessException(
+                "Set the lead's delivery mode (Online/Offline) before handing off to a counsellor.",
+                "DELIVERY_MODE_REQUIRED", HttpStatus.BAD_REQUEST);
         }
 
         // Delivery-mode-aware handoff gate
@@ -122,6 +138,14 @@ public class CounsellorHandoffService {
             throw new BusinessException(
                 "Lead already has a counsellor (ID " + lead.getCounsellorId() + ")",
                 "ALREADY_CLAIMED", HttpStatus.CONFLICT);
+        }
+
+        // A walk-in is handed to the counsellor immediately (status VISIT_DONE), so
+        // the delivery mode must be set first — same gate as a normal handoff.
+        if (lead.getDeliveryMode() == null) {
+            throw new BusinessException(
+                "Set the lead's delivery mode (Online/Offline) before claiming the walk-in.",
+                "DELIVERY_MODE_REQUIRED", HttpStatus.BAD_REQUEST);
         }
 
         int updated = leadDao.claimAsWalkIn(leadId, counsellorId, counsellorId);

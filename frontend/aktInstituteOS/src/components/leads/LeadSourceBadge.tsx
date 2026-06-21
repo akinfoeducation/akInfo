@@ -8,7 +8,9 @@ const SOURCE_MAP: Record<LeadSource, { label: string; className: string }> = {
   GOOGLE_ADS:   { label: "Google Ads",  className: "bg-yellow-50 text-yellow-700" },
   PHONE:        { label: "Phone",       className: "bg-emerald-50 text-emerald-700" },
   ONLINE:       { label: "Online",      className: "bg-sky-50 text-sky-700" },
+  IMPORTED:     { label: "Imported",    className: "bg-violet-50 text-violet-700" },
   OTHER:        { label: "Other",       className: "bg-gray-100 text-gray-600" },
+  UNKNOWN:      { label: "Unknown",     className: "bg-gray-100 text-gray-500" },
 };
 
 export function LeadSourceBadge({ source }: { source: LeadSource }) {

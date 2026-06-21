@@ -27,6 +27,7 @@ import {
   Select, SelectContent, SelectItem,
   SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { selectLabel } from "@/lib/ui/select-label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LeadStatusBadge } from "@/components/leads/LeadStatusBadge";
 import { LeadSourceBadge } from "@/components/leads/LeadSourceBadge";
@@ -36,15 +37,18 @@ import {
   unassignLead, assignLead, listLeadActivities,
   listBranches, transferToBranch, listLeadTransfers,
   handoffToCounsellor, claimWalkIn, listCounsellors, counsellorLabel,
-  createBooking, getLeadBooking, uploadPaymentProof, verifyPayment, cancelBooking,
+  createBooking, getLeadBooking, uploadPaymentProof, uploadPaymentProofFile, verifyPayment, cancelBooking,
 } from "@/lib/api/leads.api";
 import { ActionPanel } from "@/components/leads/ActionPanel";
+import { CallerDisposition, CALLABLE_STATES } from "@/components/leads/CallerDisposition";
+import { DuplicateLeadDialog, type DuplicateConflictView } from "@/components/leads/DuplicateLeadDialog";
+import { PaymentProofView } from "@/components/bookings/PaymentProofView";
 import { listUsers } from "@/lib/api/users.api";
 import { listAllBatches } from "@/lib/api/batches.api";
 import type { Batch } from "@/types/course";
 import { usePermissions } from "@/lib/hooks/usePermissions";
 import type {
-  Lead, LeadStatus, CurrentWork, InterestedFor,
+  Lead, LeadStatus, CurrentWork, InterestedFor, DeliveryMode, LeadSource,
   FollowUp, LeadActivity, Branch, LeadTransfer, AdmissionBooking,
 } from "@/types/lead";
 
@@ -72,6 +76,13 @@ const editSchema = z.object({
   whatsappNumber: z.string().regex(/^[6-9]\d{9}$/, "Invalid number").optional().or(z.literal("")),
   email: z.string().email("Invalid email").optional().or(z.literal("")),
   courseInterested: z.string().optional().or(z.literal("")),
+  source: z.string().optional().or(z.literal("")),
+  deliveryMode: z.enum(["ONLINE", "OFFLINE"]).optional().or(z.literal("")),
+  preferredBatch: z.string().optional().or(z.literal("")),
+  preferredBranch: z.string().optional().or(z.literal("")),
+  parentName: z.string().optional().or(z.literal("")),
+  parentPhone: z.string().regex(/^[6-9]\d{9}$/, "Invalid number").optional().or(z.literal("")),
+  parentEmail: z.string().email("Invalid email").optional().or(z.literal("")),
   address: z.string().optional().or(z.literal("")),
   currentWork: z.string().optional().or(z.literal("")),
   interestedFor: z.string().optional().or(z.literal("")),
@@ -110,11 +121,12 @@ function apiErr(err: unknown): string | undefined {
 }
 
 function transferLabel(t: LeadTransfer): string {
+  const to = t.toCallerName ?? (t.toCallerId != null ? `#${t.toCallerId}` : "counsellor");
   switch (t.transferType) {
     case "BRANCH_TRANSFER":    return `Transferred to ${t.toBranchName ?? "branch"}`;
     case "POOL_CLAIM":         return "Claimed from retry pool";
-    case "COUNSELLOR_HANDOFF": return `Handed off to counsellor (ID ${t.toCallerId})`;
-    case "WALK_IN_CLAIM":      return `Walk-in claimed by counsellor (ID ${t.toCallerId})`;
+    case "COUNSELLOR_HANDOFF": return `Handed off to ${to}`;
+    case "WALK_IN_CLAIM":      return `Walk-in claimed by ${to}`;
     case "REASSIGN":           return "Reassigned";
     default:                   return t.transferType.replace(/_/g, " ");
   }
@@ -140,6 +152,8 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
 
   // ── Local state ──────────────────────────────────────────────────────────
   const [editing, setEditing]                       = useState(false);
+  const [dupConflicts, setDupConflicts]             = useState<DuplicateConflictView[]>([]);
+  const [dupOpen, setDupOpen]                        = useState(false);
   const [confirmDelete, setConfirmDelete]           = useState(false);
   const [showFollowUpForm, setShowFollowUpForm]     = useState(false);
   const [followUpDate, setFollowUpDate]             = useState("");
@@ -157,6 +171,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const [bookingAmount, setBookingAmount]           = useState("");
   const [bookingNotes, setBookingNotes]             = useState("");
   const [proofUrl, setProofUrl]                     = useState("");
+  const [proofFile, setProofFile]                   = useState<File | null>(null);
   const [confirmCancel, setConfirmCancel]           = useState(false);
   const [cancelReason, setCancelReason]             = useState("");
 
@@ -186,6 +201,11 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     staleTime: 2 * 60_000, enabled: canAssign || isAdmin,
   });
   const callers = callersData?.data ?? [];
+  const callerName = (id?: number | null) => {
+    if (id == null) return "—";
+    const c = callers.find((x) => x.id === id);
+    return c ? counsellorLabel(c) : `Caller #${id}`;
+  };
 
   const { data: counsellors = [] } = useQuery({
     queryKey: ["counsellors-for-handoff"],
@@ -193,6 +213,11 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     staleTime: 5 * 60_000,
     enabled: canHandoff || isAdmin,
   });
+  const counsellorName = (id?: number | null) => {
+    if (id == null) return "—";
+    const c = counsellors.find((x) => x.id === id);
+    return c ? counsellorLabel(c) : `Counsellor #${id}`;
+  };
 
   const { data: activities = [] } = useQuery<LeadActivity[]>({
     queryKey: ["lead-activities", leadId],
@@ -239,6 +264,8 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const courseInterestedValue = watch("courseInterested");
   const currentWorkValue      = watch("currentWork");
   const interestedForValue    = watch("interestedFor");
+  const deliveryModeValue     = watch("deliveryMode");
+  const sourceValue           = watch("source");
 
   function startEditing() {
     if (!lead) return;
@@ -246,6 +273,10 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       firstName: lead.firstName, lastName: lead.lastName ?? "",
       phone: lead.phone, whatsappNumber: lead.whatsappNumber ?? "",
       email: lead.email ?? "", courseInterested: lead.courseInterested ?? "",
+      source: lead.source ?? "",
+      deliveryMode: lead.deliveryMode ?? "",
+      preferredBatch: lead.preferredBatch ?? "", preferredBranch: lead.preferredBranch ?? "",
+      parentName: lead.parentName ?? "", parentPhone: lead.parentPhone ?? "", parentEmail: lead.parentEmail ?? "",
       address: lead.address ?? "", currentWork: lead.currentWork ?? "",
       interestedFor: lead.interestedFor ?? "",
       nextFollowUpAt: lead.nextFollowUpAt ? new Date(lead.nextFollowUpAt).toISOString().slice(0, 16) : "",
@@ -261,6 +292,13 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
       whatsappNumber: values.whatsappNumber || undefined,
       email: values.email || undefined,
       courseInterested: values.courseInterested || undefined,
+      source: (values.source as LeadSource) || undefined,
+      deliveryMode: (values.deliveryMode as DeliveryMode) || undefined,
+      preferredBatch: values.preferredBatch || undefined,
+      preferredBranch: values.preferredBranch || undefined,
+      parentName: values.parentName || undefined,
+      parentPhone: values.parentPhone || undefined,
+      parentEmail: values.parentEmail || undefined,
       address: values.address || undefined,
       currentWork: (values.currentWork as CurrentWork) || undefined,
       interestedFor: (values.interestedFor as InterestedFor) || undefined,
@@ -270,7 +308,21 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     onSuccess: (updated) => {
       qc.setQueryData(["lead", leadId], updated);
       qc.invalidateQueries({ queryKey: ["leads"] });
-      toast.success("Lead updated");
+      const conflicts = updated.duplicateConflicts ?? [];
+      if (conflicts.length > 0) {
+        setDupConflicts(conflicts.map((c) => ({
+          number: c.number,
+          field: c.field,
+          leadId: c.conflictingLeadId,
+          name: c.conflictingLeadName,
+          status: c.conflictingLeadStatus,
+          assignedToName: c.assignedToName,
+        })));
+        setDupOpen(true);
+        toast.warning("Saved — but a duplicate number was not applied");
+      } else {
+        toast.success("Lead updated");
+      }
       setEditing(false);
     },
     onError: (err) => {
@@ -394,6 +446,12 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
     onError: (err) => toast.error(apiErr(err) ?? "Upload failed."),
   });
 
+  const uploadProofFileMutation = useMutation({
+    mutationFn: ({ bookingId, file }: { bookingId: number; file: File }) => uploadPaymentProofFile(bookingId, file),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["lead-booking", leadId] }); toast.success("Payment proof uploaded"); setProofFile(null); },
+    onError: (err) => toast.error(apiErr(err) ?? "Upload failed."),
+  });
+
   const verifyPaymentMutation = useMutation({
     mutationFn: (bookingId: number) => verifyPayment(bookingId),
     onSuccess: () => {
@@ -446,20 +504,23 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
   const canEdit    = isAdmin || isMyLead;
 
   const showCallerActions = !isTerminal && !isPostVisit && !isCounsellor;
+  // The 4-button caller disposition replaces the generic action panel while a lead
+  // is in a "callable" pre-visit state. Later states (visit planned, booking, etc.)
+  // keep the existing action panel for reschedule / handoff / booking steps.
+  const useDisposition = !isPostVisit && !isCounsellor && CALLABLE_STATES.includes(lead.status);
 
-  // Handoff is allowed when:
-  //  - OFFLINE: status is VISIT_DONE, BOOKING_CONFIRMED, or VISIT_PENDING (student arrived)
-  //  - ONLINE:  status is ADMISSION_INTERESTED or BOOKING_CONFIRMED (remote, no visit)
-  //  - No counsellor assigned yet
-  // NOTE: VISIT_PLANNED is intentionally excluded — handoff from a planned visit
-  // happens through the "Student Visited — Hand Off to Counsellor" action in the
-  // ActionPanel, which marks VISIT_DONE and assigns the counsellor in one step.
-  const HANDOFF_ELIGIBLE_STATUSES: LeadStatus[] = [
-    "VISIT_DONE", "VISIT_PENDING",
-    "ADMISSION_INTERESTED", "BOOKING_CONFIRMED",
-  ];
-  const canDoHandoff = canHandoff && !isTerminal && !lead.counsellorId
-    && (isAdmin || HANDOFF_ELIGIBLE_STATUSES.includes(lead.status));
+  // Handoff eligibility must match the backend gate exactly, otherwise the card
+  // shows for a lead the action will reject:
+  //  - ONLINE:  only at BOOKING_CONFIRMED (remote — payment verified, no visit)
+  //  - OFFLINE: at VISIT_DONE or BOOKING_CONFIRMED
+  // ADMISSION_INTERESTED is NOT eligible — an online lead must first Create Booking
+  // and have payment verified (→ BOOKING_CONFIRMED) before handoff appears.
+  // VISIT_PLANNED is excluded too: that handoff happens via the "Student Visited"
+  // action, which marks VISIT_DONE and assigns the counsellor in one step.
+  const handoffEligible = lead.deliveryMode === "ONLINE"
+    ? lead.status === "BOOKING_CONFIRMED"
+    : (lead.status === "VISIT_DONE" || lead.status === "BOOKING_CONFIRMED");
+  const canDoHandoff = canHandoff && !isTerminal && !lead.counsellorId && handoffEligible;
 
   const canClaimWalkIn = canHandoff && isCounsellor && !lead.counsellorId && !isTerminal;
 
@@ -522,7 +583,7 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           <UserCheck className="size-5 text-sky-600 shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-medium text-sky-800">
-              Counsellor assigned
+              {lead.counsellorName ?? "Counsellor assigned"}
               {lead.counsellorId === userId && <span className="ml-1.5 text-sky-600 font-semibold">(you)</span>}
             </p>
             {lead.handedOffAt && (
@@ -532,7 +593,9 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
             )}
           </div>
           {lead.callerId && (
-            <p className="text-xs text-muted-foreground">Original caller: ID {lead.callerId}</p>
+            <p className="text-xs text-muted-foreground">
+              Original caller: {lead.callerName ?? `#${lead.callerId}`}
+            </p>
           )}
         </Card>
       )}
@@ -571,14 +634,25 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
             What happened?
           </p>
-          <ActionPanel
-            lead={lead}
-            onActionComplete={(updated) => {
-              qc.setQueryData(["lead", leadId], updated);
-              qc.invalidateQueries({ queryKey: ["leads"] });
-              qc.invalidateQueries({ queryKey: ["lead-activities", leadId] });
-            }}
-          />
+          {useDisposition ? (
+            <CallerDisposition
+              lead={lead}
+              onActionComplete={(updated) => {
+                qc.setQueryData(["lead", leadId], updated);
+                qc.invalidateQueries({ queryKey: ["leads"] });
+                qc.invalidateQueries({ queryKey: ["lead-activities", leadId] });
+              }}
+            />
+          ) : (
+            <ActionPanel
+              lead={lead}
+              onActionComplete={(updated) => {
+                qc.setQueryData(["lead", leadId], updated);
+                qc.invalidateQueries({ queryKey: ["leads"] });
+                qc.invalidateQueries({ queryKey: ["lead-activities", leadId] });
+              }}
+            />
+          )}
         </Card>
       )}
 
@@ -593,6 +667,84 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
               qc.invalidateQueries({ queryKey: ["lead-activities", leadId] });
             }}
           />
+        </Card>
+      )}
+
+      {/* Caller Assignment (admin only, pre-handoff) — placed high so an admin can
+          assign without scrolling. */}
+      {(isAdmin || canAssign) && !isPostVisit && (
+        <Card className="p-6">
+          <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4 flex items-center gap-2">
+            <Users className="size-3.5" /> Caller Assignment
+          </h2>
+          {lead.assignedToId ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Assigned to {callerName(lead.callerId ?? lead.assignedToId)}</p>
+                  {lead.assignedAt && (
+                    <p className="text-xs text-muted-foreground mt-0.5">Since {format(new Date(lead.assignedAt), "dd MMM yyyy")}</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50"
+                    disabled={unassignMutation.isPending} onClick={() => unassignMutation.mutate()}>
+                    <UserMinus className="size-3.5" />{unassignMutation.isPending ? "…" : "Unassign"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setShowReassign(v => !v)}>
+                    <Users className="size-3.5" /> Reassign
+                  </Button>
+                </div>
+              </div>
+              {showReassign && (
+                <div className="flex items-center gap-3 pt-2 border-t">
+                  <Select value={reassignCallerId} onValueChange={(v) => setReassignCallerId(v ?? "")}>
+                    <SelectTrigger className="flex-1 h-9 text-sm">
+                      <SelectValue placeholder="Select new caller…">
+                        {(v) => (v ? callerName(Number(v)) : "Select new caller…")}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {callers.map(c => (
+                        <SelectItem key={c.id} value={c.id.toString()}>
+                          {counsellorLabel(c)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white shrink-0"
+                    disabled={!reassignCallerId || reassignMutation.isPending}
+                    onClick={() => reassignMutation.mutate(Number(reassignCallerId))}>
+                    {reassignMutation.isPending ? "Saving…" : "Confirm Reassign"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setShowReassign(false); setReassignCallerId(""); }}>Cancel</Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-muted-foreground flex-1">Not assigned to any caller</p>
+              <Select value={reassignCallerId} onValueChange={(v) => setReassignCallerId(v ?? "")}>
+                <SelectTrigger className="w-52 h-9 text-sm">
+                  <SelectValue placeholder="Select caller…">
+                    {(v) => (v ? callerName(Number(v)) : "Select caller…")}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {callers.map(c => (
+                    <SelectItem key={c.id} value={c.id.toString()}>
+                      {counsellorLabel(c)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                disabled={!reassignCallerId || reassignMutation.isPending}
+                onClick={() => reassignMutation.mutate(Number(reassignCallerId))}>
+                {reassignMutation.isPending ? "Assigning…" : "Assign"}
+              </Button>
+            </div>
+          )}
         </Card>
       )}
 
@@ -665,7 +817,11 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 Marks the lead as <strong>Visit Done</strong> and transfers ownership to the selected counsellor.
               </p>
               <Select value={handoffCounsellorId} onValueChange={(v) => setHandoffCounsellorId(v ?? "")}>
-                <SelectTrigger className="w-full bg-white"><SelectValue placeholder="Select counsellor…" /></SelectTrigger>
+                <SelectTrigger className="w-full bg-white">
+                  <SelectValue placeholder="Select counsellor…">
+                    {(v) => (v ? counsellorName(Number(v)) : "Select counsellor…")}
+                  </SelectValue>
+                </SelectTrigger>
                 <SelectContent>
                   {counsellors.map(c => (
                     <SelectItem key={c.id} value={String(c.id)}>
@@ -727,24 +883,42 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 </span>
               </div>
 
-              {/* Upload proof */}
+              {/* Upload proof — pick an image/PDF from the device, or paste a link */}
               {booking.bookingStatus === "PAYMENT_PENDING" && !booking.paymentProofUrl && (
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Payment proof URL (UTR / screenshot link)…"
-                    className="text-sm" value={proofUrl} onChange={e => setProofUrl(e.target.value)}
-                  />
-                  <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white shrink-0"
-                    disabled={!proofUrl || uploadProofMutation.isPending}
-                    onClick={() => uploadProofMutation.mutate({ bookingId: booking.id, url: proofUrl })}>
-                    {uploadProofMutation.isPending ? "Uploading…" : "Upload Proof"}
-                  </Button>
+                <div className="space-y-2">
+                  <div className="flex gap-2 items-center">
+                    <label className="flex-1 cursor-pointer rounded-lg border border-dashed border-emerald-300 bg-emerald-50/40 px-3 py-2 text-sm text-emerald-800 hover:bg-emerald-50 truncate">
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        className="hidden"
+                        onChange={e => setProofFile(e.target.files?.[0] ?? null)}
+                      />
+                      {proofFile ? proofFile.name : "📎 Choose screenshot or PDF…"}
+                    </label>
+                    <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white shrink-0"
+                      disabled={!proofFile || uploadProofFileMutation.isPending}
+                      onClick={() => proofFile && uploadProofFileMutation.mutate({ bookingId: booking.id, file: proofFile })}>
+                      {uploadProofFileMutation.isPending ? "Uploading…" : "Upload Proof"}
+                    </Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="…or paste a proof link (UTR / screenshot URL)"
+                      className="text-sm" value={proofUrl} onChange={e => setProofUrl(e.target.value)}
+                    />
+                    <Button size="sm" variant="outline" className="shrink-0"
+                      disabled={!proofUrl || uploadProofMutation.isPending}
+                      onClick={() => uploadProofMutation.mutate({ bookingId: booking.id, url: proofUrl })}>
+                      {uploadProofMutation.isPending ? "Saving…" : "Use Link"}
+                    </Button>
+                  </div>
                 </div>
               )}
               {booking.paymentProofUrl && booking.bookingStatus === "PAYMENT_PENDING" && (
                 <p className="text-xs text-emerald-700 flex items-center gap-1">
                   <CheckCircle2 className="size-3.5" /> Proof uploaded ·{" "}
-                  <a href={booking.paymentProofUrl} target="_blank" rel="noreferrer" className="underline">View</a>
+                  <PaymentProofView bookingId={booking.id} paymentProofUrl={booking.paymentProofUrl} mode="link" />
                 </p>
               )}
 
@@ -763,8 +937,11 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                 </p>
               )}
 
-              {/* Cancel booking */}
-              {(isAdmin || isCounsellor) && booking.bookingStatus !== "CANCELLED" && (
+              {/* Cancel booking (C6): cancelling a CONFIRMED booking reverses a verified payment,
+                  so counsellors may only cancel a PAYMENT_PENDING booking; verify-holders (Accountant/
+                  Admin) may cancel any active booking. */}
+              {booking.bookingStatus !== "CANCELLED"
+                && (canVerify || isAdmin || (isCounsellor && booking.bookingStatus === "PAYMENT_PENDING")) && (
                 <div>
                   {!confirmCancel ? (
                     <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50"
@@ -806,8 +983,8 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
                     {isCounsellor ? "In-person Admission Booking" : "Remote Token Booking"}
                   </p>
                   <Select value={bookingBatchId} onValueChange={(v) => setBookingBatchId(v ?? "")}>
-                    <SelectTrigger className="bg-white"><SelectValue placeholder="Select batch…" /></SelectTrigger>
-                    <SelectContent>
+                    <SelectTrigger className="w-full bg-white"><SelectValue placeholder="Select batch…">{selectLabel(batches, (b: Batch) => b.name, "Select batch…")}</SelectValue></SelectTrigger>
+                    <SelectContent className="w-auto min-w-[var(--anchor-width)] max-w-[min(28rem,90vw)]">
                       {batches.map((b: Batch) => (
                         <SelectItem key={b.id} value={String(b.id)}>
                           {b.name}{b.availableSeats != null ? ` (${b.availableSeats} seats)` : ""}
@@ -935,6 +1112,55 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
             </div>
             <Field label="Notes"><Textarea rows={3} {...register("notes")} /></Field>
           </Card>
+
+          {/* ── Qualification — gathered by the caller during/after the call ── */}
+          <Card className="p-6 space-y-4">
+            <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Qualification</h2>
+            <Field
+              label="Delivery Mode — required before planning a visit, booking, or handoff"
+              error={errors.deliveryMode?.message}
+            >
+              <Select
+                value={deliveryModeValue || "__none"}
+                onValueChange={(v) => setValue("deliveryMode", !v || v === "__none" ? "" : (v as "ONLINE" | "OFFLINE"))}
+              >
+                <SelectTrigger className="w-full"><SelectValue placeholder="Select Online or Offline…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">— Not set —</SelectItem>
+                  <SelectItem value="ONLINE">Online</SelectItem>
+                  <SelectItem value="OFFLINE">Offline</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Preferred Batch"><Input placeholder="Morning, Weekend…" {...register("preferredBatch")} /></Field>
+              <Field label="Preferred Branch"><Input placeholder="Delhi, Noida…" {...register("preferredBranch")} /></Field>
+            </div>
+            <Field label="Source">
+              <Select value={sourceValue || "__none"} onValueChange={(v) => setValue("source", !v || v === "__none" ? "" : v)}>
+                <SelectTrigger className="w-full"><SelectValue placeholder="Select…" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">— Not specified —</SelectItem>
+                  <SelectItem value="WALK_IN">Walk In</SelectItem>
+                  <SelectItem value="REFERRAL">Referral</SelectItem>
+                  <SelectItem value="SOCIAL_MEDIA">Social Media</SelectItem>
+                  <SelectItem value="WEBSITE">Website</SelectItem>
+                  <SelectItem value="GOOGLE_ADS">Google Ads</SelectItem>
+                  <SelectItem value="PHONE">Phone</SelectItem>
+                  <SelectItem value="ONLINE">Online</SelectItem>
+                  <SelectItem value="IMPORTED">Imported</SelectItem>
+                  <SelectItem value="OTHER">Other</SelectItem>
+                  <SelectItem value="UNKNOWN">Unknown</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Parent / Guardian Name"><Input {...register("parentName")} /></Field>
+              <Field label="Parent Phone" error={errors.parentPhone?.message}><Input maxLength={10} {...register("parentPhone")} /></Field>
+            </div>
+            <Field label="Parent Email" error={errors.parentEmail?.message}><Input type="email" {...register("parentEmail")} /></Field>
+          </Card>
+
           <div className="flex gap-3">
             <Button type="submit" disabled={isSubmitting || updateMutation.isPending} className="bg-emerald-500 hover:bg-emerald-600 text-white">
               {updateMutation.isPending ? "Saving…" : "Save Changes"}
@@ -1001,75 +1227,6 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
         </p>
       )}
 
-      {/* Caller Assignment (admin only, pre-handoff) */}
-      {(isAdmin || canAssign) && !isPostVisit && (
-        <Card className="p-6">
-          <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-4 flex items-center gap-2">
-            <Users className="size-3.5" /> Caller Assignment
-          </h2>
-          {lead.assignedToId ? (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">Assigned to caller ID {lead.callerId ?? lead.assignedToId}</p>
-                  {lead.assignedAt && (
-                    <p className="text-xs text-muted-foreground mt-0.5">Since {format(new Date(lead.assignedAt), "dd MMM yyyy")}</p>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50"
-                    disabled={unassignMutation.isPending} onClick={() => unassignMutation.mutate()}>
-                    <UserMinus className="size-3.5" />{unassignMutation.isPending ? "…" : "Unassign"}
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => setShowReassign(v => !v)}>
-                    <Users className="size-3.5" /> Reassign
-                  </Button>
-                </div>
-              </div>
-              {showReassign && (
-                <div className="flex items-center gap-3 pt-2 border-t">
-                  <Select value={reassignCallerId} onValueChange={(v) => setReassignCallerId(v ?? "")}>
-                    <SelectTrigger className="flex-1 h-9 text-sm"><SelectValue placeholder="Select new caller…" /></SelectTrigger>
-                    <SelectContent>
-                      {callers.map(c => (
-                        <SelectItem key={c.id} value={c.id.toString()}>
-                          {counsellorLabel(c)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white shrink-0"
-                    disabled={!reassignCallerId || reassignMutation.isPending}
-                    onClick={() => reassignMutation.mutate(Number(reassignCallerId))}>
-                    {reassignMutation.isPending ? "Saving…" : "Confirm Reassign"}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => { setShowReassign(false); setReassignCallerId(""); }}>Cancel</Button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center gap-3">
-              <p className="text-sm text-muted-foreground flex-1">Not assigned to any caller</p>
-              <Select value={reassignCallerId} onValueChange={(v) => setReassignCallerId(v ?? "")}>
-                <SelectTrigger className="w-52 h-9 text-sm"><SelectValue placeholder="Select caller…" /></SelectTrigger>
-                <SelectContent>
-                  {callers.map(c => (
-                    <SelectItem key={c.id} value={c.id.toString()}>
-                      {counsellorLabel(c)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button size="sm" className="bg-emerald-500 hover:bg-emerald-600 text-white"
-                disabled={!reassignCallerId || reassignMutation.isPending}
-                onClick={() => reassignMutation.mutate(Number(reassignCallerId))}>
-                {reassignMutation.isPending ? "Assigning…" : "Assign"}
-              </Button>
-            </div>
-          )}
-        </Card>
-      )}
-
       {/* Activity Timeline */}
       {activities.length > 0 && (
         <Card className="p-6">
@@ -1117,6 +1274,13 @@ export default function LeadDetailPage({ params }: { params: Promise<{ id: strin
           </div>
         </Card>
       )}
+
+      <DuplicateLeadDialog
+        open={dupOpen}
+        onOpenChange={setDupOpen}
+        context="update"
+        conflicts={dupConflicts}
+      />
 
     </div>
   );

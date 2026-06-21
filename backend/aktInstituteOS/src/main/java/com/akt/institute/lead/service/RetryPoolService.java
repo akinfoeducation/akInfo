@@ -23,10 +23,14 @@ import java.util.List;
  * Handles the NOT_CONNECTED Retry Pool workflow.
  *
  * Flow:
- *  1. Caller marks lead NOT_CONNECTED → not_connected_at is stamped.
+ *  1. Caller marks lead NOT_CONNECTED via the guarded CALL_NOT_CONNECTED workflow
+ *     action (LeadWorkflowService) → not_connected_at is stamped.
  *  2. After RETRY_DELAY_MINUTES, lead appears in the shared retry pool.
  *  3. Any caller can claim a lead from the pool (atomic single ownership).
  *  4. Claiming sets assigned_to_id = claimant, status = ASSIGNED, removes from pool.
+ *
+ * NOTE: there is no direct markNotConnected() here — the only way to set NOT_CONNECTED
+ * is the ownership/phase/ALLOWED_FROM-guarded CALL_NOT_CONNECTED action (C4 backdoor removed).
  */
 @Service
 @RequiredArgsConstructor
@@ -40,27 +44,6 @@ public class RetryPoolService {
     private final LeadMapper          leadMapper;
     private final LeadActivityService activityService;
     private final LeadTransferDao     transferDao;
-
-    // ── Mark Not Connected ────────────────────────────────────────────────────
-
-    @Transactional
-    public LeadResponse markNotConnected(Long leadId, Long instituteId, Long callerId) {
-        Lead lead = leadDao.findByIdAndInstituteId(leadId, instituteId)
-            .orElseThrow(() -> new ResourceNotFoundException("Lead", leadId));
-
-        // Only the assigned caller (or admin who called this) can mark not-connected
-        lead.setStatus(LeadStatus.NOT_CONNECTED);
-        lead.setNotConnectedAt(Instant.now());
-        // Keep assigned_to_id so the lead stays with caller during the 30-min hide window
-        Lead saved = leadDao.save(lead);
-
-        activityService.record(leadId, instituteId, "NOT_CONNECTED",
-            "Call not connected. Will enter retry pool in " + RETRY_DELAY_MINUTES + " minutes.",
-            callerId);
-
-        log.info("Lead {} marked NOT_CONNECTED by caller {}", leadId, callerId);
-        return leadMapper.toResponse(saved);
-    }
 
     // ── Retry Pool List ───────────────────────────────────────────────────────
 
