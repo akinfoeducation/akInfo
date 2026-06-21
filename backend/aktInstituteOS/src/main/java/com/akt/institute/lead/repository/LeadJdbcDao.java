@@ -73,6 +73,70 @@ public class LeadJdbcDao implements LeadDao {
     }
 
     @Override
+    public boolean hasActiveLeadByAnyPhone(java.util.Collection<String> numbers, Long instituteId) {
+        return lookupActiveByAnyPhone(numbers, instituteId, null).isPresent();
+    }
+
+    @Override
+    public Optional<com.akt.institute.lead.dto.LeadLookupResponse> lookupActiveByAnyPhone(
+            java.util.Collection<String> numbers, Long instituteId, Long excludeId) {
+        // Normalise: drop nulls/blanks and de-duplicate. If nothing usable remains
+        // there is nothing to collide with.
+        List<String> probe = numbers == null ? List.of() : numbers.stream()
+                .filter(n -> n != null && !n.isBlank())
+                .map(String::trim)
+                .distinct()
+                .toList();
+        if (probe.isEmpty()) return Optional.empty();
+
+        List<String> deadStates = LeadStatus.ROUTABLE_TERMINAL.stream().map(Enum::name).toList();
+        StringBuilder sql = new StringBuilder(
+                "SELECT l.id, l.first_name, l.last_name, l.phone, l.whatsapp_number, l.status, l.lead_stage," +
+                "       l.assigned_to_id," +
+                "       COALESCE(NULLIF(TRIM(u.first_name || ' ' || COALESCE(u.last_name,'')), ''), u.username) AS assigned_name" +
+                "  FROM leads l" +
+                "  LEFT JOIN users u ON u.id = l.assigned_to_id" +
+                " WHERE l.institute_id = :instituteId AND l.deleted_at IS NULL" +
+                "   AND l.status NOT IN (:deadStates)" +
+                "   AND (l.phone IN (:numbers) OR l.whatsapp_number IN (:numbers))");
+        MapSqlParameterSource params = new MapSqlParameterSource()
+                .addValue("instituteId", instituteId)
+                .addValue("deadStates", deadStates)
+                .addValue("numbers", probe);
+        if (excludeId != null) {
+            sql.append(" AND l.id <> :excludeId");
+            params.addValue("excludeId", excludeId);
+        }
+        sql.append(" ORDER BY l.updated_at DESC LIMIT 1");
+
+        List<com.akt.institute.lead.dto.LeadLookupResponse> rows = jdbc.query(sql.toString(), params, (rs, i) -> {
+            long leadId  = rs.getLong("id");
+            String first = rs.getString("first_name");
+            String last  = rs.getString("last_name");
+            String phone = rs.getString("phone");
+            String whatsapp = rs.getString("whatsapp_number");
+            String status = rs.getString("status");
+            String stage  = rs.getString("lead_stage");
+            String ownerName = rs.getString("assigned_name");
+            long ownerId = rs.getLong("assigned_to_id");
+            Long ownerIdOrNull = rs.wasNull() ? null : ownerId;   // must check immediately after getLong
+            String name = ((first == null ? "" : first) + " " + (last == null ? "" : last)).trim();
+            return com.akt.institute.lead.dto.LeadLookupResponse.builder()
+                .exists(true)
+                .leadId(leadId)
+                .name(name.isBlank() ? phone : name)
+                .phone(phone)
+                .whatsappNumber(whatsapp)
+                .status(status)
+                .stage(stage)
+                .assignedToId(ownerIdOrNull)
+                .assignedToName(ownerName)
+                .build();
+        });
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
+
+    @Override
     public boolean existsByPhoneAndInstituteIdAndIdNot(String phone, Long instituteId, Long excludeId) {
         Long count = jdbc.queryForObject(
                 "SELECT COUNT(1) FROM leads WHERE phone = :phone AND institute_id = :instituteId AND id <> :excludeId AND deleted_at IS NULL",
@@ -486,7 +550,7 @@ public class LeadJdbcDao implements LeadDao {
                 .addValue("whatsappNumber",      l.getWhatsappNumber())
                 .addValue("email",               l.getEmail())
                 .addValue("courseInterested",    l.getCourseInterested())
-                .addValue("source",              l.getSource() == null ? LeadSource.WALK_IN.name() : l.getSource().name())
+                .addValue("source",              l.getSource() == null ? LeadSource.UNKNOWN.name() : l.getSource().name())
                 .addValue("status",              l.getStatus() == null ? LeadStatus.NEW_LEAD.name() : l.getStatus().name())
                 .addValue("leadStage",           l.getStage() == null ? com.akt.institute.lead.domain.LeadStage.CALLER_PIPELINE.name() : l.getStage().name())
                 .addValue("version",             l.getVersion() != null ? l.getVersion() : 0L)
@@ -534,7 +598,7 @@ public class LeadJdbcDao implements LeadDao {
         String src = rs.getString("source");
         if (src != null) {
             try { l.setSource(LeadSource.valueOf(src)); }
-            catch (IllegalArgumentException ignored) { l.setSource(LeadSource.WALK_IN); }
+            catch (IllegalArgumentException ignored) { l.setSource(LeadSource.UNKNOWN); }
         }
         String status = rs.getString("status");
         if (status != null) {

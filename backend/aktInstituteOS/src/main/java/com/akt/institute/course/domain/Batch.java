@@ -23,11 +23,14 @@ public class Batch extends BaseEntity {
     private LocalDate startDate;
     private LocalDate endDate;
     private Integer maxCapacity;
+    // Authoritative seat counter (C3): consumed when a booking is confirmed, restored when a
+    // booking is cancelled/released. Null only for legacy/uncapped batches.
+    private Integer availableSeats;
     @Builder.Default
     private BatchStatus status = BatchStatus.PLANNED;
 
     // ── Computed / joined ──────────────────────────────────────────────────
     private String courseName;
     private String courseCode;
-    private int enrolledCount;    // COUNT(admissions) for this batch
+    private int enrolledCount;    // COUNT(admissions) for this batch — informational only
 }

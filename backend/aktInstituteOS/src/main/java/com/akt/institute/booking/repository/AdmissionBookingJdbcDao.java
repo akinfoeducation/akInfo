@@ -125,9 +125,12 @@ public class AdmissionBookingJdbcDao implements AdmissionBookingDao {
 
     @Override
     public boolean restoreSeat(Long batchId) {
+        // Bounded restore (C3): never let available_seats exceed max_capacity, even if called
+        // more than once for the same booking. Uncapped batches (max_capacity NULL) have no
+        // finite seat pool and are left untouched.
         int updated = jdbc.update(
             "UPDATE batches SET available_seats = available_seats + 1, updated_at = CURRENT_TIMESTAMP" +
-            " WHERE id = :batchId",
+            " WHERE id = :batchId AND max_capacity IS NOT NULL AND available_seats < max_capacity",
             new MapSqlParameterSource("batchId", batchId)
         );
         return updated > 0;

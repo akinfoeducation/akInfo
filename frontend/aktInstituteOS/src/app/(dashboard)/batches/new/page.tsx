@@ -16,6 +16,7 @@ import { Card } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { selectLabel } from "@/lib/ui/select-label";
 import { createBatch } from "@/lib/api/batches.api";
 import { listCourses } from "@/lib/api/courses.api";
 
@@ -126,7 +127,9 @@ export default function NewBatchPage() {
               onValueChange={(v) => setValue("courseId", v === "__none" ? 0 : Number(v), { shouldValidate: true })}
             >
               <SelectTrigger className="w-full" aria-invalid={!!errors.courseId}>
-                <SelectValue placeholder="Select a course…" />
+                <SelectValue placeholder="Select a course…">
+                  {selectLabel(courses, c => c.name, "Select a course…", { "__none": "— Select course —" })}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none">— Select course —</SelectItem>

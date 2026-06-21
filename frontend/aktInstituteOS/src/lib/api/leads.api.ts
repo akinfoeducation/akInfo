@@ -6,7 +6,6 @@ import type {
   CreateLeadRequest,
   UpdateLeadRequest,
   LeadListParams,
-  LeadStatus,
   LeadStage,
   FollowUp,
   CreateFollowUpRequest,
@@ -22,6 +21,7 @@ import type {
   LeadTransfer,
   AvailableAction,
   LeadActionRequest,
+  LeadLookup,
 } from "@/types/lead";
 
 type PagedResponse<T> = ApiResponse<T>;
@@ -43,6 +43,18 @@ export async function createLead(request: CreateLeadRequest): Promise<Lead> {
   return data.data;
 }
 
+/**
+ * Real-time duplicate check (Requirement 6). Returns whether the number already
+ * belongs to an active lead (matched against primary OR alternate), plus that
+ * lead's status and current owner for the popup.
+ */
+export async function lookupLeadByPhone(phone: string): Promise<LeadLookup> {
+  const { data } = await apiClient.get<ApiResponse<LeadLookup>>("/api/v1/leads/lookup", {
+    params: { phone },
+  });
+  return data.data;
+}
+
 export async function updateLead(id: number, request: UpdateLeadRequest): Promise<Lead> {
   const { data } = await apiClient.put<ApiResponse<Lead>>(`/api/v1/leads/${id}`, request);
   return data.data;
@@ -59,11 +71,6 @@ export async function bulkImportLeads(file: File): Promise<BulkImportResult> {
   const { data } = await apiClient.post<ApiResponse<BulkImportResult>>("/api/v1/leads/bulk-import", form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
-  return data.data;
-}
-
-export async function convertLead(id: number): Promise<Lead> {
-  const { data } = await apiClient.post<ApiResponse<Lead>>(`/api/v1/leads/${id}/convert`);
   return data.data;
 }
 
@@ -129,6 +136,31 @@ export async function uploadPaymentProof(bookingId: number, proofUrl: string): P
   return data.data;
 }
 
+export async function uploadPaymentProofFile(bookingId: number, file: File): Promise<AdmissionBooking> {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await apiClient.post<ApiResponse<AdmissionBooking>>(
+    `/api/v1/bookings/${bookingId}/payment-proof-file`,
+    form,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
+  return data.data;
+}
+
+/**
+ * Fetch a booking's payment proof through the authenticated endpoint and return an object URL.
+ * Payment proofs are private (not publicly served) — the JWT is attached by the api client, so we
+ * must fetch the bytes here rather than pointing an <img>/<a> at a static URL. Revoke the returned
+ * URL with URL.revokeObjectURL when done.
+ */
+export async function getPaymentProofObjectUrl(bookingId: number): Promise<string> {
+  const { data } = await apiClient.get<Blob>(
+    `/api/v1/bookings/${bookingId}/payment-proof-file`,
+    { responseType: "blob" }
+  );
+  return URL.createObjectURL(data);
+}
+
 export async function verifyPayment(bookingId: number): Promise<AdmissionBooking> {
   const { data } = await apiClient.patch<ApiResponse<AdmissionBooking>>(`/api/v1/bookings/${bookingId}/verify`);
   return data.data;
@@ -139,12 +171,9 @@ export async function listBookings(params: { status?: string; page?: number; siz
   return data;
 }
 
-// ── NOT_CONNECTED / Retry Pool ────────────────────────────────────────────────
-
-export async function markNotConnected(id: number): Promise<Lead> {
-  const { data } = await apiClient.patch<ApiResponse<Lead>>(`/api/v1/leads/${id}/not-connected`);
-  return data.data;
-}
+// ── Retry Pool ────────────────────────────────────────────────────────────────
+// A lead enters the pool via the guarded CALL_NOT_CONNECTED workflow action
+// (performLeadAction), not a direct endpoint — see CallerDisposition.
 
 export async function listRetryPool(params: { page?: number; size?: number } = {}): Promise<PagedResponse<LeadSummary[]>> {
   const { data } = await apiClient.get<PagedResponse<LeadSummary[]>>("/api/v1/leads/retry-pool", { params });

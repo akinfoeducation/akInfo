@@ -45,7 +45,9 @@ public class LeadResponse {
     private Long    branchId;
     // dual ownership (Fix 1)
     private Long    callerId;
+    private String  callerName;       // resolved on detail fetch (getById)
     private Long    counsellorId;
+    private String  counsellorName;   // resolved on detail fetch (getById)
     private Instant handedOffAt;
     private Instant visitPlannedAt;
     private Instant visitDoneAt;
@@ -53,4 +55,8 @@ public class LeadResponse {
     private Instant admissionDoneAt;
     private Instant createdAt;
     private Instant updatedAt;
+
+    // Populated only on an update where a primary/alternate number was rejected
+    // because it already belongs to another active lead (Requirement 6). Null otherwise.
+    private java.util.List<LeadDuplicateConflict> duplicateConflicts;
 }

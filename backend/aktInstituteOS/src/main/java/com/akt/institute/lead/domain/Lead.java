@@ -21,7 +21,7 @@ public class Lead extends BaseEntity {
     private String email;
     private String courseInterested;
     @Builder.Default
-    private LeadSource source = LeadSource.WALK_IN;
+    private LeadSource source = LeadSource.UNKNOWN;
     @Builder.Default
     private LeadStatus status = LeadStatus.NEW_LEAD;
     @Builder.Default

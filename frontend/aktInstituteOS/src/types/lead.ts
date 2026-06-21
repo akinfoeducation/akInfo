@@ -17,6 +17,7 @@ export type LeadAction =
   | "CONFIRM_REMOTE_ADMISSION"
   | "CALL_NOT_CONNECTED"
   | "MARK_NOT_INTERESTED"
+  | "MARK_INVALID"
   | "MARK_NOT_REACHABLE"
   | "TRANSFER_BRANCH"
   | "STUDENT_VISITED"
@@ -69,6 +70,7 @@ export type LeadStatus =
   | "NOT_CONNECTED"
   | "NOT_INTERESTED"
   | "NOT_REACHABLE"
+  | "INVALID"
   | "ADMISSION_INTERESTED"
   | "PAYMENT_PENDING"
   | "PAYMENT_VERIFIED"
@@ -94,7 +96,9 @@ export type LeadSource =
   | "GOOGLE_ADS"
   | "PHONE"
   | "ONLINE"
-  | "OTHER";
+  | "IMPORTED"
+  | "OTHER"
+  | "UNKNOWN";
 
 export type CurrentWork = "JOB" | "FARMER" | "STUDENT" | "BUSINESS" | "NO_WORK";
 export type InterestedFor = "JOB" | "ABROAD" | "HOBBY" | "BUSINESS" | "JOB_AND_BUSINESS";
@@ -139,7 +143,9 @@ export interface Lead {
   branchId?: number;
   // Dual ownership (V30)
   callerId?: number;
+  callerName?: string;
   counsellorId?: number;
+  counsellorName?: string;
   handedOffAt?: string;
   visitPlannedAt?: string;
   visitDoneAt?: string;
@@ -147,6 +153,9 @@ export interface Lead {
   admissionDoneAt?: string;
   createdAt: string;
   updatedAt: string;
+  // Populated only on an update where a number was dropped because it already
+  // belongs to another active lead (Requirement 6). Undefined otherwise.
+  duplicateConflicts?: LeadDuplicateConflict[];
 }
 
 export interface LeadSummary {
@@ -173,13 +182,14 @@ export interface LeadSummary {
 }
 
 export interface CreateLeadRequest {
-  firstName: string;
+  firstName?: string;          // optional at intake — falls back to phone
   lastName?: string;
-  phone: string;
+  phone: string;               // the only required field
   whatsappNumber?: string;
   email?: string;
   courseInterested?: string;
   source?: LeadSource;
+  deliveryMode?: DeliveryMode; // only sent for walk-ins; otherwise set during qualification
   assignedToId?: number;
   address?: string;
   currentWork?: CurrentWork;
@@ -196,6 +206,12 @@ export interface UpdateLeadRequest {
   email?: string;
   courseInterested?: string;
   source?: LeadSource;
+  deliveryMode?: DeliveryMode;
+  preferredBatch?: string;
+  preferredBranch?: string;
+  parentName?: string;
+  parentPhone?: string;
+  parentEmail?: string;
   address?: string;
   currentWork?: CurrentWork;
   interestedFor?: InterestedFor;
@@ -287,8 +303,33 @@ export interface BulkAssignResult {
   assigned: number;
   reassigned: number;
   skipped: number;
+  locked: number;       // CALLBACK/INTERESTED — locked to their caller, not moved
   notFound: number;
   errors: string[];
+}
+
+// Real-time duplicate lookup result (Requirement 6)
+export interface LeadLookup {
+  exists: boolean;
+  leadId?: number;
+  name?: string;
+  phone?: string;
+  whatsappNumber?: string;
+  status?: LeadStatus;
+  stage?: LeadStage;
+  assignedToId?: number;
+  assignedToName?: string;
+}
+
+// A number rejected on update because it already belongs to another active lead
+export interface LeadDuplicateConflict {
+  number: string;
+  field: "phone" | "whatsappNumber";
+  conflictingLeadId: number;
+  conflictingLeadName?: string;
+  conflictingLeadStatus?: LeadStatus;
+  assignedToId?: number;
+  assignedToName?: string;
 }
 
 export interface LeadActivity {
@@ -336,7 +377,9 @@ export interface LeadTransfer {
   id: number;
   transferType: string;
   fromCallerId?: number;
+  fromCallerName?: string;
   toCallerId?: number;
+  toCallerName?: string;
   toBranchId?: number;
   toBranchName?: string;
   notes?: string;

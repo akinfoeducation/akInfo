@@ -93,6 +93,18 @@ public class LeadController {
         return ResponseEntity.ok(ApiResponse.ok("Import complete", result));
     }
 
+    // ── Duplicate lookup (real-time form check) ───────────────────────────────
+
+    @GetMapping("/lookup")
+    @PreAuthorize("hasAuthority('LEAD_VIEW')")
+    @Operation(summary = "Check if a phone/alternate number already belongs to an active lead — backs the duplicate popup")
+    public ResponseEntity<ApiResponse<LeadLookupResponse>> lookup(
+        @AuthenticationPrincipal UserPrincipal principal,
+        @RequestParam String phone
+    ) {
+        return ResponseEntity.ok(ApiResponse.ok(leadService.lookupByPhone(phone, principal.getInstituteId())));
+    }
+
     // ── Get by ID ───────────────────────────────────────────────────────────
 
     @GetMapping("/{id}")
@@ -102,7 +114,7 @@ public class LeadController {
         @AuthenticationPrincipal UserPrincipal principal,
         @PathVariable Long id
     ) {
-        return ResponseEntity.ok(ApiResponse.ok(leadService.getById(id, principal.getInstituteId())));
+        return ResponseEntity.ok(ApiResponse.ok(leadService.getById(id, principal.getInstituteId(), principal)));
     }
 
     // ── Update ──────────────────────────────────────────────────────────────
@@ -168,20 +180,7 @@ public class LeadController {
         @AuthenticationPrincipal UserPrincipal principal,
         @PathVariable Long id
     ) {
-        return ResponseEntity.ok(ApiResponse.ok(leadService.listActivities(id, principal.getInstituteId())));
-    }
-
-    // ── Convert ─────────────────────────────────────────────────────────────
-
-    @PostMapping("/{id}/convert")
-    @PreAuthorize("hasAuthority('LEAD_CONVERT')")
-    @Operation(summary = "Mark lead as BOOKING_CONFIRMED")
-    public ResponseEntity<ApiResponse<LeadResponse>> convert(
-        @AuthenticationPrincipal UserPrincipal principal,
-        @PathVariable Long id
-    ) {
-        var lead = leadService.convert(id, principal.getInstituteId());
-        return ResponseEntity.ok(ApiResponse.ok("Lead converted successfully", lead));
+        return ResponseEntity.ok(ApiResponse.ok(leadService.listActivities(id, principal.getInstituteId(), principal)));
     }
 
     // ── Delete ──────────────────────────────────────────────────────────────
@@ -197,18 +196,11 @@ public class LeadController {
         return ResponseEntity.ok(ApiResponse.message("Lead deleted successfully"));
     }
 
-    // ── NOT_CONNECTED / Retry Pool ───────────────────────────────────────────
-
-    @PatchMapping("/{id}/not-connected")
-    @PreAuthorize("hasAuthority('LEAD_UPDATE')")
-    @Operation(summary = "Mark lead as NOT_CONNECTED — enters retry pool after 30 minutes")
-    public ResponseEntity<ApiResponse<LeadResponse>> markNotConnected(
-        @AuthenticationPrincipal UserPrincipal principal,
-        @PathVariable Long id
-    ) {
-        var lead = retryPoolService.markNotConnected(id, principal.getInstituteId(), principal.getId());
-        return ResponseEntity.ok(ApiResponse.ok("Lead marked as not connected", lead));
-    }
+    // ── Retry Pool ───────────────────────────────────────────────────────────
+    // A lead enters the shared retry pool by being marked NOT_CONNECTED through the
+    // guarded CALL_NOT_CONNECTED workflow action (POST /leads/{id}/actions), which
+    // enforces ownership + caller-phase + ALLOWED_FROM. There is intentionally no
+    // direct "mark not-connected" endpoint — that legacy backdoor was removed (C4).
 
     @GetMapping("/retry-pool")
     @PreAuthorize("hasAuthority('LEAD_VIEW')")

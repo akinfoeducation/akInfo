@@ -27,7 +27,9 @@ public interface CourseMapper {
     List<CourseSummaryResponse> toSummaryList(List<Course> courses);
 
     @Mapping(target = "status",         expression = "java(batch.getStatus() != null ? batch.getStatus().name() : null)")
-    @Mapping(target = "availableSeats", expression = "java(batch.getMaxCapacity() != null ? Math.max(0, batch.getMaxCapacity() - batch.getEnrolledCount()) : 0)")
+    // Single source of truth (C3): the available_seats column. Fall back to capacity−enrolled
+    // only for legacy/uncapped rows where the column was never populated.
+    @Mapping(target = "availableSeats", expression = "java(batch.getAvailableSeats() != null ? Math.max(0, batch.getAvailableSeats()) : (batch.getMaxCapacity() != null ? Math.max(0, batch.getMaxCapacity() - batch.getEnrolledCount()) : 0))")
     BatchResponse toBatchResponse(Batch batch);
 
     List<BatchResponse> toBatchResponseList(List<Batch> batches);

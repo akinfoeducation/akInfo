@@ -11,7 +11,9 @@ public class LeadTransferResponse {
     private Long    id;
     private String  transferType;
     private Long    fromCallerId;
+    private String  fromCallerName;
     private Long    toCallerId;
+    private String  toCallerName;
     private Long    toBranchId;
     private String  toBranchName;
     private String  notes;

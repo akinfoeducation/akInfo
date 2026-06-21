@@ -294,6 +294,42 @@ public class CrmWorkflowSteps {
             admin, null));
     }
 
+    @When("the counsellor cancels the booking")
+    public void counsellorCancelsBooking() throws Exception {
+        ok(send(HttpMethod.PATCH, "/api/v1/bookings/" + bookingId + "/cancel?reason=Wrong+batch",
+            counsellor, null));
+    }
+
+    @When("the accountant cancels the booking")
+    public void accountantCancelsBooking() throws Exception {
+        ok(send(HttpMethod.PATCH, "/api/v1/bookings/" + bookingId + "/cancel?reason=Refund",
+            accountant, null));
+    }
+
+    @When("the counsellor tries to cancel the booking")
+    public void counsellorTriesCancelBooking() throws Exception {
+        lastResponse = send(HttpMethod.PATCH, "/api/v1/bookings/" + bookingId + "/cancel?reason=x",
+            counsellor, null);
+    }
+
+    @When("the counsellor tries to verify the booking")
+    public void counsellorTriesVerifyBooking() throws Exception {
+        lastResponse = verifyBooking(counsellor, bookingId);
+    }
+
+    @When("the admin transfers the lead to another branch")
+    public void adminTransfersBranch() throws Exception {
+        long bId = ensureBranchId();
+        ok(send(HttpMethod.POST, "/api/v1/leads/" + leadId + "/transfer-branch", admin,
+            Map.of("branchId", bId, "notes", "Confirmed lead moved")));
+    }
+
+    @When("the admission is cancelled")
+    public void admissionCancelled() throws Exception {
+        ok(send(HttpMethod.PATCH, "/api/v1/admissions/" + admissionId + "/status", admin,
+            Map.of("status", "CANCELLED")));
+    }
+
     // ── Whens that are expected to FAIL (stored for a rejection check) ─────────
 
     @When("the caller tries to mark {string}")
@@ -310,6 +346,36 @@ public class CrmWorkflowSteps {
     @When("the counsellor tries to complete the admission")
     public void counsellorTriesComplete() throws Exception {
         lastResponse = action(counsellor, "COMPLETE_ADMISSION");
+    }
+
+    @When("the counsellor tries to mark the lead not interested")
+    public void counsellorTriesNotInterested() throws Exception {
+        lastResponse = action(counsellor, "MARK_NOT_INTERESTED", Map.of("reason", "Changed mind"));
+    }
+
+    @When("the counsellor tries to schedule a follow-up")
+    public void counsellorTriesScheduleFollowUp() throws Exception {
+        lastResponse = action(counsellor, "SCHEDULE_FOLLOW_UP");
+    }
+
+    // C4 / C5 — the legacy backdoor endpoints were removed; hitting them must 404/405.
+    @When("a caller hits the removed not-connected endpoint")
+    public void hitRemovedNotConnected() throws Exception {
+        lastResponse = send(HttpMethod.PATCH, "/api/v1/leads/" + leadId + "/not-connected", caller, null);
+    }
+
+    @When("a counsellor hits the removed convert endpoint")
+    public void hitRemovedConvert() throws Exception {
+        lastResponse = send(HttpMethod.POST, "/api/v1/leads/" + leadId + "/convert", counsellor, null);
+    }
+
+    @Then("the endpoint no longer exists")
+    public void endpointNoLongerExists() throws Exception {
+        // The route is gone, so the legacy backdoor can never succeed. (An unmapped path on this
+        // app surfaces as a non-2xx error rather than a clean 404 — see the separate missing-404
+        // handler item; here we only assert the backdoor cannot be invoked.)
+        int status = lastResponse.andReturn().getResponse().getStatus();
+        assertThat(status).as("legacy backdoor must not succeed").isGreaterThanOrEqualTo(400);
     }
 
     // ═══════════════════════════ Thens ═══════════════════════════════════════

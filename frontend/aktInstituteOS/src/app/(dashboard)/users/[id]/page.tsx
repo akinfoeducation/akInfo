@@ -25,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { selectLabel } from "@/lib/ui/select-label";
 import type { UpdateUserRequest, UserSessionResponse } from "@/types/user-management";
 
 type Tab = "profile" | "roles" | "sessions" | "security";
@@ -279,7 +280,7 @@ function ProfileTab({ user, branches, departments, onSave, saving }: {
         <F label="Joining Date"><Input value={form.joiningDate} onChange={set("joiningDate")} type="date" /></F>
         <F label="Branch">
           <Select value={form.branchId || "none"} onValueChange={(v) => { const val = v ?? "none"; setForm((f) => ({ ...f, branchId: val === "none" ? "" : val })); }}>
-            <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Select branch">{selectLabel(branches, (b: { id: number; name: string }) => b.name, "Select branch", { none: "None" })}</SelectValue></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">None</SelectItem>
               {branches.map((b: any) => <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>)}
@@ -288,7 +289,7 @@ function ProfileTab({ user, branches, departments, onSave, saving }: {
         </F>
         <F label="Department">
           <Select value={form.departmentId || "none"} onValueChange={(v) => { const val = v ?? "none"; setForm((f) => ({ ...f, departmentId: val === "none" ? "" : val })); }}>
-            <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Select department">{selectLabel(departments, (d: { id: number; name: string }) => d.name, "Select department", { none: "None" })}</SelectValue></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">None</SelectItem>
               {departments.map((d: any) => <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>)}

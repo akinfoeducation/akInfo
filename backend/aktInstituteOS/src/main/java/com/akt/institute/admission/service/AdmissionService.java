@@ -44,6 +44,7 @@ public class AdmissionService {
     private final StudentService studentService;
     private final ApplicationEventPublisher eventPublisher;
     private final LeadActivityService activityService;
+    private final com.akt.institute.booking.repository.AdmissionBookingDao bookingDao;
 
     // ── Create ──────────────────────────────────────────────────────────────
 
@@ -71,15 +72,12 @@ public class AdmissionService {
                 "ADMISSION_ALREADY_EXISTS", HttpStatus.CONFLICT);
         }
 
-        // Optional batch validation during creation
+        // Resolve the batch name for display. No capacity check here (C3): the seat was already
+        // reserved at booking confirmation for this lead's batch — re-checking available_seats
+        // would double-count the lead's own seat and falsely reject the last seat in a batch.
         if (request.getBatchId() != null) {
             var batch = courseDao.findBatchByIdAndInstituteId(request.getBatchId(), instituteId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch", request.getBatchId()));
-            if (batch.getMaxCapacity() != null && batch.getEnrolledCount() >= batch.getMaxCapacity()) {
-                throw new BusinessException(
-                    "Batch is full. Capacity: " + batch.getMaxCapacity(),
-                    "BATCH_FULL", HttpStatus.BAD_REQUEST);
-            }
             request.setBatchName(batch.getName());
         }
 
@@ -192,6 +190,12 @@ public class AdmissionService {
 
         admission.setStatus(newStatus);
         Admission saved = admissionDao.save(admission);
+
+        // Cancelling an admission releases the seat its booking reserved (C3).
+        if (newStatus == AdmissionStatus.CANCELLED) {
+            releaseBookingSeat(admission.getLeadId(), instituteId, "Admission cancelled");
+        }
+
         log.info("Admission {} status changed to {}", id, newStatus);
         return admissionMapper.toResponse(saved);
     }
@@ -255,9 +259,12 @@ public class AdmissionService {
         } else {
             var batch = courseDao.findBatchByIdAndInstituteId(batchId, instituteId)
                 .orElseThrow(() -> new ResourceNotFoundException("Batch", batchId));
-            if (batch.getMaxCapacity() != null && batch.getEnrolledCount() >= batch.getMaxCapacity()) {
+            // Capacity gate reads the authoritative available_seats counter (C3). NOTE: re-batching
+            // an admission does not itself move the reserved seat between batches — that is an admin
+            // tool; the seat stays accounted against the original booking's batch.
+            if (batch.getAvailableSeats() != null && batch.getAvailableSeats() <= 0) {
                 throw new BusinessException(
-                    "Batch is full. Capacity: " + batch.getMaxCapacity() + ", Enrolled: " + batch.getEnrolledCount(),
+                    "Batch is full. No seats available.",
                     "BATCH_FULL", HttpStatus.BAD_REQUEST);
             }
             admission.setBatchId(batchId);
@@ -281,10 +288,28 @@ public class AdmissionService {
         Admission admission = findOrThrow(id, instituteId);
         admission.setDeletedAt(Instant.now());
         admissionDao.save(admission);
+        // Deleting an admission releases the seat its booking reserved (C3).
+        releaseBookingSeat(admission.getLeadId(), instituteId, "Admission deleted");
         log.info("Admission soft-deleted: id={}", id);
     }
 
     // ── Internals ───────────────────────────────────────────────────────────
+
+    /**
+     * Release the seat reserved by a lead's active booking (C3): restore the seat to the booking's
+     * batch (bounded) and cancel the booking. No-op when there is no active booking. Idempotent —
+     * once cancelled, the booking is no longer "active" so a subsequent call does nothing.
+     */
+    private void releaseBookingSeat(Long leadId, Long instituteId, String reason) {
+        bookingDao.findActiveByLeadId(leadId, instituteId).ifPresent(booking -> {
+            if (booking.getBookingStatus()
+                    == com.akt.institute.booking.domain.BookingStatus.BOOKING_CONFIRMED) {
+                bookingDao.restoreSeat(booking.getBatchId());
+            }
+            bookingDao.cancelBooking(booking.getId(),
+                com.akt.institute.shared.util.AuditUtil.getCurrentUserId(), reason);
+        });
+    }
 
     private Admission findOrThrow(Long id, Long instituteId) {
         return admissionDao.findByIdAndInstituteId(id, instituteId)

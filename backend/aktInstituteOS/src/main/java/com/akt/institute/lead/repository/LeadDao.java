@@ -5,6 +5,7 @@ import com.akt.institute.lead.domain.LeadStatus;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -21,6 +22,26 @@ public interface LeadDao {
      * routing (Scenario C9) can re-assign it to the previous caller.
      */
     boolean hasActiveLeadByPhone(String phone, Long instituteId);
+
+    /**
+     * True if an <em>active</em> (non-dead) lead exists whose primary phone OR
+     * whatsapp/alternate number matches any of the supplied numbers. This closes
+     * the cross-field gap: a new lead's primary phone may collide with an existing
+     * lead's alternate number, or vice versa. Dead/closed leads
+     * ({@link com.akt.institute.lead.domain.LeadStatus#ROUTABLE_TERMINAL}) are
+     * excluded so same-number routing (Scenario C9) still works.
+     */
+    boolean hasActiveLeadByAnyPhone(Collection<String> numbers, Long instituteId);
+
+    /**
+     * Returns a lightweight summary (incl. the current owner's name) of the most
+     * recent <em>active</em> lead whose primary phone OR whatsapp/alternate number
+     * matches any of the supplied numbers, excluding {@code excludeId} (pass
+     * {@code null} to match all). Backs the real-time lookup endpoint and the
+     * update-path duplicate popup. Dead/closed leads are excluded.
+     */
+    Optional<com.akt.institute.lead.dto.LeadLookupResponse> lookupActiveByAnyPhone(
+        Collection<String> numbers, Long instituteId, Long excludeId);
 
     boolean existsByPhoneAndInstituteIdAndIdNot(String phone, Long instituteId, Long excludeId);
 

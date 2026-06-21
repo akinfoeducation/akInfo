@@ -50,6 +50,7 @@ public enum LeadAction {
     CONFIRM_REMOTE_ADMISSION,
     CALL_NOT_CONNECTED,
     MARK_NOT_INTERESTED,
+    MARK_INVALID,             // wrong number / fake / unusable contact
     MARK_NOT_REACHABLE,
     TRANSFER_BRANCH,
 

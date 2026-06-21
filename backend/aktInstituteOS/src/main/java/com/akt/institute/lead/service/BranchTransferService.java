@@ -7,6 +7,7 @@ import com.akt.institute.lead.activity.service.LeadActivityService;
 import com.akt.institute.lead.domain.*;
 import com.akt.institute.lead.dto.*;
 import com.akt.institute.lead.mapper.LeadMapper;
+import com.akt.institute.auth.repository.UserDao;
 import com.akt.institute.lead.repository.LeadDao;
 import com.akt.institute.lead.repository.LeadTransferDao;
 import com.akt.institute.shared.exception.BusinessException;
@@ -41,6 +42,14 @@ public class BranchTransferService {
     private final LeadTransferDao     transferDao;
     private final LeadActivityService activityService;
     private final LeadMapper          leadMapper;
+    private final UserDao             userDao;
+    private final com.akt.institute.booking.repository.AdmissionBookingDao bookingDao;
+
+    /** Resolves a user id to a display name, or null. */
+    private String userName(Long id) {
+        if (id == null) return null;
+        return userDao.findById(id).map(com.akt.institute.auth.domain.User::getFullName).orElse(null);
+    }
 
     // ── List Branches ─────────────────────────────────────────────────────────
 
@@ -91,6 +100,16 @@ public class BranchTransferService {
             lead.setPreviousCallerId(previousCaller);
         }
 
+        // Release any active booking's reserved seat (C3): the lead is leaving this branch, so a
+        // seat it confirmed here must be returned to the pool. The booking is cancelled too, so the
+        // receiving branch starts the lead fresh.
+        bookingDao.findActiveByLeadId(leadId, instituteId).ifPresent(booking -> {
+            if (booking.getBookingStatus() == com.akt.institute.booking.domain.BookingStatus.BOOKING_CONFIRMED) {
+                bookingDao.restoreSeat(booking.getBatchId());
+            }
+            bookingDao.cancelBooking(booking.getId(), actorId, "Lead transferred to another branch");
+        });
+
         // Close out caller ownership; set branch
         lead.setAssignedToId(null);
         lead.setAssignedAt(null);
@@ -134,7 +153,9 @@ public class BranchTransferService {
                     .id(t.getId())
                     .transferType(t.getTransferType())
                     .fromCallerId(t.getFromCallerId())
+                    .fromCallerName(userName(t.getFromCallerId()))
                     .toCallerId(t.getToCallerId())
+                    .toCallerName(userName(t.getToCallerId()))
                     .toBranchId(t.getToBranchId())
                     .toBranchName(branchName)
                     .notes(t.getNotes())

@@ -54,6 +54,9 @@ public class LeadWorkflowService {
     private final LeadTransferDao        transferDao;
     private final AdmissionDao           admissionDao;
     private final AdmissionBookingDao    bookingDao;
+    private final com.akt.institute.auth.service.UserAccessValidator userAccessValidator;
+
+    private static final String COUNSELLOR_ROLE = "COUNSELLOR";
 
     // ── Available Actions ─────────────────────────────────────────────────────
 
@@ -65,6 +68,7 @@ public class LeadWorkflowService {
     public List<AvailableActionResponse> availableActions(Long leadId, Long instituteId,
                                                           UserPrincipal actor) {
         Lead lead = findOrThrow(leadId, instituteId);
+        requireReadAccess(lead, actor);
         List<AvailableActionResponse> actions = new ArrayList<>();
 
         boolean isAdmin       = hasAuthority(actor, "LEAD_STATUS_OVERRIDE");
@@ -247,6 +251,22 @@ public class LeadWorkflowService {
                 .group("Close")
                 .requiresInput(true)
                 .build());
+
+            // "Invalid Lead" (wrong number / fake) only makes sense while contact
+            // validity is still unestablished — early call states. Once a lead has
+            // engaged (interested / visit / admission), it is a confirmed valid
+            // prospect, so Invalid is not offered there. The 4-button caller
+            // disposition carries Invalid for those early states.
+            if (s == LeadStatus.NEW_LEAD || s == LeadStatus.ASSIGNED
+                    || s == LeadStatus.CONTACTED || s == LeadStatus.NOT_CONNECTED) {
+                actions.add(AvailableActionResponse.builder()
+                    .action(LeadAction.MARK_INVALID.name())
+                    .label("Invalid Lead")
+                    .primary(false)
+                    .group("Close")
+                    .requiresInput(true)
+                    .build());
+            }
         }
 
         // ── Counsellor phase actions ──────────────────────────────────────────
@@ -389,6 +409,7 @@ public class LeadWorkflowService {
             case CONFIRM_REMOTE_ADMISSION  -> handleConfirmRemoteAdmission(lead, request, actor);
             case CALL_NOT_CONNECTED        -> handleCallNotConnected(lead, request, actor);
             case MARK_NOT_INTERESTED       -> handleMarkNotInterested(lead, request, actor);
+            case MARK_INVALID              -> handleMarkInvalid(lead, request, actor);
             case MARK_NOT_REACHABLE        -> handleMarkNotReachable(lead, request, actor);
             case STUDENT_VISITED           -> handleStudentVisited(lead, request, actor, instituteId);
             case CONFIRM_VISIT             -> handleConfirmVisit(lead, request, actor);
@@ -462,6 +483,7 @@ public class LeadWorkflowService {
     private void handlePlanVisit(Lead lead, LeadActionRequest req, UserPrincipal actor) {
         requireCallerPhase(lead);
         requireOwnership(lead, actor);
+        requireDeliveryMode(lead);
         lead.setStatus(LeadStatus.VISIT_PLANNED);
         if (lead.getVisitPlannedAt() == null) {
             lead.setVisitPlannedAt(Instant.now());
@@ -486,6 +508,7 @@ public class LeadWorkflowService {
     private void handleConfirmRemoteAdmission(Lead lead, LeadActionRequest req, UserPrincipal actor) {
         requireCallerPhase(lead);
         requireOwnership(lead, actor);
+        requireDeliveryMode(lead);
         lead.setStatus(LeadStatus.ADMISSION_INTERESTED);
         lead.setLastContactedAt(Instant.now());
         logAction(lead, LeadAction.CONFIRM_REMOTE_ADMISSION, "STATUS",
@@ -502,13 +525,41 @@ public class LeadWorkflowService {
             actor.getId());
     }
 
+    /**
+     * A lead with an active booking cannot be closed (Not Interested / Invalid) directly —
+     * the booking must be cancelled first so the reserved seat is restored (C3 / business
+     * decision: cancel-booking-first). Prevents silent seat leaks when a booked lead dies.
+     */
+    private void requireNoActiveBooking(Lead lead, String closeLabel) {
+        if (bookingDao.findActiveByLeadId(lead.getId(), lead.getInstituteId()).isPresent()) {
+            throw new BusinessException(
+                "This lead has an active booking. Cancel the booking first (which restores the seat) "
+                    + "before marking it " + closeLabel + ".",
+                "ACTIVE_BOOKING_EXISTS", HttpStatus.CONFLICT);
+        }
+    }
+
     private void handleMarkNotInterested(Lead lead, LeadActionRequest req, UserPrincipal actor) {
         requireOwnership(lead, actor);
+        requireNoActiveBooking(lead, "not interested");
         lead.setStatus(LeadStatus.NOT_INTERESTED);
         lead.setStage(LeadStage.DEAD);
         String reason = req.getReason() != null ? ". Reason: " + req.getReason() : "";
         logAction(lead, LeadAction.MARK_NOT_INTERESTED, "STATUS",
             "NOT_INTERESTED", "Lead marked not interested" + reason + notes(req), actor.getId());
+    }
+
+    private void handleMarkInvalid(Lead lead, LeadActionRequest req, UserPrincipal actor) {
+        requireOwnership(lead, actor);
+        requireNoActiveBooking(lead, "invalid");
+        if (req.getReason() == null || req.getReason().isBlank()) {
+            throw new BusinessException("A reason is required to mark a lead invalid.",
+                "INVALID_REASON_REQUIRED", HttpStatus.BAD_REQUEST);
+        }
+        lead.setStatus(LeadStatus.INVALID);
+        lead.setStage(LeadStage.DEAD);
+        logAction(lead, LeadAction.MARK_INVALID, "STATUS",
+            "INVALID", "Lead marked invalid. Reason: " + req.getReason() + notes(req), actor.getId());
     }
 
     private void handleMarkNotReachable(Lead lead, LeadActionRequest req, UserPrincipal actor) {
@@ -541,6 +592,8 @@ public class LeadWorkflowService {
                 "counsellorId is required — please select which counsellor to hand off to.",
                 "MISSING_COUNSELLOR_ID", HttpStatus.BAD_REQUEST);
         }
+        // C1: validate the chosen counsellor is a real, active COUNSELLOR in this institute.
+        userAccessValidator.requireActiveUserWithRole(req.getCounsellorId(), instituteId, COUNSELLOR_ROLE);
 
         Long previousOwnerId = lead.getAssignedToId();
 
@@ -629,6 +682,7 @@ public class LeadWorkflowService {
     private void handleStartAdmission(Lead lead, LeadActionRequest req, UserPrincipal actor) {
         requireCounsellorPhase(lead);
         requireOwnership(lead, actor);
+        requireDeliveryMode(lead);
         if (lead.getStatus() != LeadStatus.BOOKING_CONFIRMED
                 && lead.getStatus() != LeadStatus.DOCUMENT_PENDING) {
             throw new BusinessException(
@@ -711,6 +765,9 @@ public class LeadWorkflowService {
                 "counsellorId is required for REASSIGN_COUNSELLOR",
                 "MISSING_COUNSELLOR_ID", HttpStatus.BAD_REQUEST);
         }
+        // C1: validate the target counsellor before reassigning ownership to it.
+        userAccessValidator.requireActiveUserWithRole(req.getCounsellorId(), instituteId, COUNSELLOR_ROLE);
+
         if (lead.getStage() != LeadStage.COUNSELLOR_PIPELINE) {
             throw new BusinessException(
                 "Can only reassign counsellor on leads in COUNSELLOR_PIPELINE stage. Current: "
@@ -766,12 +823,47 @@ public class LeadWorkflowService {
         }
     }
 
+    /**
+     * Delivery mode (ONLINE/OFFLINE) is captured during qualification, not at intake.
+     * It must be set before a lead can be advanced — the ONLINE/OFFLINE split drives
+     * visit, booking and handoff behaviour, so leaving it null would make those steps
+     * ambiguous. Enforced at every forward gate.
+     */
+    private void requireDeliveryMode(Lead lead) {
+        if (lead.getDeliveryMode() == null) {
+            throw new BusinessException(
+                "Set the lead's delivery mode (Online/Offline) before this step.",
+                "DELIVERY_MODE_REQUIRED", HttpStatus.BAD_REQUEST);
+        }
+    }
+
     private void requireOwnership(Lead lead, UserPrincipal actor) {
         boolean isAdmin = hasAuthority(actor, "LEAD_STATUS_OVERRIDE");
         if (isAdmin) return;
         if (!java.util.Objects.equals(lead.getAssignedToId(), actor.getId())) {
             throw new BusinessException(
                 "You can only perform actions on leads assigned to you",
+                "ACCESS_DENIED", HttpStatus.FORBIDDEN);
+        }
+    }
+
+    /**
+     * Read-access guard — mirrors LeadService.enforceReadAccess so the
+     * available-actions endpoint cannot leak an unowned lead's state. Admins and
+     * anyone related to the lead (owner / attributed caller / counsellor) may read.
+     */
+    private void requireReadAccess(Lead lead, UserPrincipal actor) {
+        boolean privileged = hasAuthority(actor, "LEAD_STATUS_OVERRIDE")
+            || hasAuthority(actor, "LEAD_ASSIGN")
+            || hasAuthority(actor, "LEAD_DELETE");
+        if (privileged) return;
+        Long uid = actor.getId();
+        boolean related = java.util.Objects.equals(lead.getAssignedToId(), uid)
+            || java.util.Objects.equals(lead.getCallerId(), uid)
+            || java.util.Objects.equals(lead.getCounsellorId(), uid);
+        if (!related) {
+            throw new BusinessException(
+                "You can only view leads assigned to you",
                 "ACCESS_DENIED", HttpStatus.FORBIDDEN);
         }
     }
@@ -838,11 +930,29 @@ public class LeadWorkflowService {
         LeadStatus.INTERESTED, LeadStatus.FOLLOW_UP, LeadStatus.CALLBACK,
         LeadStatus.NOT_CONNECTED);
 
+    // Schedule-follow-up belongs to the active caller-pipeline conversation only —
+    // it must NOT pull a booked / counsellor-phase lead back into the call phase (H2).
+    private static final Set<LeadStatus> FOLLOW_UP_FROM = EnumSet.of(
+        LeadStatus.CONTACTED, LeadStatus.INTERESTED, LeadStatus.FOLLOW_UP, LeadStatus.CALLBACK);
+
+    // "Invalid" = bad data / wrong number — only meaningful in the early call stage,
+    // before any visit/booking commitment (H2). A committed lead can never be invalid.
+    private static final Set<LeadStatus> INVALID_FROM = EnumSet.of(
+        LeadStatus.NEW_LEAD, LeadStatus.ASSIGNED, LeadStatus.CONTACTED, LeadStatus.NOT_CONNECTED);
+
+    // "Not interested" can be set from any live state EXCEPT a state that is already
+    // terminal or admitted. Booked states are allowed through this status gate but are
+    // caught by the active-booking guard in the handler ("cancel the booking first") so
+    // the seat is restored before the lead dies (H2 + C3).
+    private static final Set<LeadStatus> NOT_INTERESTED_FROM = EnumSet.complementOf(EnumSet.of(
+        LeadStatus.NOT_INTERESTED, LeadStatus.NOT_REACHABLE, LeadStatus.INVALID,
+        LeadStatus.CLOSED, LeadStatus.ADMISSION_DONE));
+
     // Actions whose source status is restricted. Any action NOT in this map is
-    // unrestricted (Not Interested, Schedule Follow-up, admin override, and the
-    // counsellor actions which already guard themselves by status). Both
-    // availableActions() and performAction() consult this map, so the UI can
-    // never offer a transition the API would reject.
+    // unrestricted by this gate — that's the admin override plus the counsellor
+    // actions, which guard themselves by phase (requireCounsellorPhase) / role
+    // (requireAdmin) in their handlers. Both availableActions() and performAction()
+    // consult this map, so the UI can never offer a transition the API would reject.
     private static final Map<LeadAction, Set<LeadStatus>> ALLOWED_FROM = buildAllowedFrom();
 
     private static Map<LeadAction, Set<LeadStatus>> buildAllowedFrom() {
@@ -859,6 +969,11 @@ public class LeadWorkflowService {
         // Visit actions: valid only from a planned visit.
         m.put(LeadAction.RESCHEDULE_VISIT,         EnumSet.of(LeadStatus.VISIT_PLANNED));
         m.put(LeadAction.STUDENT_VISITED,          EnumSet.of(LeadStatus.VISIT_PLANNED));
+        // Terminal / follow-up actions: bound to legal source states so they can't
+        // regress a counsellor-phase lead or kill a booked lead (H2).
+        m.put(LeadAction.SCHEDULE_FOLLOW_UP,       FOLLOW_UP_FROM);
+        m.put(LeadAction.MARK_INVALID,             INVALID_FROM);
+        m.put(LeadAction.MARK_NOT_INTERESTED,      NOT_INTERESTED_FROM);
         return m;
     }
 

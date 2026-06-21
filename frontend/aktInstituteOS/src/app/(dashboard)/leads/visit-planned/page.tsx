@@ -16,6 +16,7 @@ import { Card } from "@/components/ui/card";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { selectLabel } from "@/lib/ui/select-label";
 import { LeadStatusBadge } from "@/components/leads/LeadStatusBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { LeadSummary } from "@/types/lead";
@@ -94,7 +95,9 @@ function VisitDoneModal({
             <label className="text-xs font-medium text-gray-700">Assign Counsellor *</label>
             <Select value={counsellorId} onValueChange={(v) => setCounsellorId(v ?? "")}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select counsellor…" />
+                <SelectValue placeholder="Select counsellor…">
+                  {selectLabel(counsellors, c => c.fullName || c.firstName || ("#" + c.id), "Select counsellor…")}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {counsellors.map(c => (
