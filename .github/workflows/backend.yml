@@ -116,6 +116,12 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Push a plain single-platform image manifest. The default attestation
+          # manifests (provenance/SBOM) make `latest` an OCI image index with extra
+          # `unknown/unknown` entries that older Docker on the VPS can fail to resolve
+          # ("content digest ... not found" on `docker compose pull`).
+          provenance: false
+          sbom: false
 
   deploy:
     name: Deploy to VPS
@@ -144,7 +150,16 @@ jobs:
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
             echo "Pulling latest backend image..."
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend
+            # Retry to ride out transient GHCR consistency hiccups (a freshly-pushed
+            # manifest can briefly 404 a referenced blob).
+            for attempt in 1 2 3; do
+              if docker compose -f docker-compose.yml -f docker-compose.prod.yml pull backend; then
+                break
+              fi
+              echo "Pull attempt $attempt failed; retrying in 10s..."
+              sleep 10
+              [ "$attempt" = 3 ] && { echo "Backend image pull failed after 3 attempts"; exit 1; }
+            done
 
             echo "Restarting backend container..."
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d \
